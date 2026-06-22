@@ -68,6 +68,8 @@ const HWC_PERIODS = [
     { v: '18th', t: 'XVIII век' }, { v: '19th', t: 'XIX век' }, { v: '20th', t: 'XX век' },
     { v: 'custom', t: '📅 Свои годы' }
 ];
+// Диапазоны лет для пресетов периодов (совпадают с порогами .c: y<1700=early и т.д.)
+const HWC_PERIOD_YEARS = { all: [862, 2026], early: [862, 1699], '18th': [1700, 1799], '19th': [1800, 1899], '20th': [1900, 2026] };
 const HWC_METRICS = [
     { v: 'lines', t: 'Строки (решить)' },
     { v: 'points', t: 'Баллы ЕГЭ (набрать)' },
@@ -84,7 +86,8 @@ window.promptAssignHwClass = function() {
 };
 
 window.openHwComposer = function(target) {
-    window._hwComposer = { target, items: [], deadline: null };
+    window._hwComposer = { target, items: [], deadline: null,
+        draft: { task: 'task4', period: 'all', metric: 'lines', goal: '', yearStart: 862, yearEnd: 2026 } };
     let overlay = document.getElementById('hw-composer-overlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -96,27 +99,56 @@ window.openHwComposer = function(target) {
     _renderHwComposer();
 };
 
+// Считать текущее состояние формы в черновик (чтобы переменные не сбрасывались при ре-рендере).
+function _hwcSyncDraft() {
+    const c = window._hwComposer; if (!c) return;
+    const d = c.draft;
+    const g = id => document.getElementById(id);
+    if (g('hwc-task')) d.task = g('hwc-task').value;
+    if (g('hwc-period')) d.period = g('hwc-period').value;
+    if (g('hwc-metric')) d.metric = g('hwc-metric').value;
+    if (g('hwc-goal')) d.goal = g('hwc-goal').value;
+    if (g('hwc-year-start')) d.yearStart = parseInt(g('hwc-year-start').value) || 0;
+    if (g('hwc-year-end')) d.yearEnd = parseInt(g('hwc-year-end').value) || 3000;
+}
+window._hwcSyncDraft = _hwcSyncDraft;
+
+// Смена пресета периода: подставляем годы пресета в поля (поля всегда видны).
+window._hwcPeriodChange = function() {
+    const c = window._hwComposer; if (!c) return;
+    _hwcSyncDraft();
+    const preset = HWC_PERIOD_YEARS[c.draft.period];
+    if (preset) { c.draft.yearStart = preset[0]; c.draft.yearEnd = preset[1]; }
+    _renderHwComposer();
+};
+
+// Ручная правка годов → период становится «Свои годы».
+window._hwcYearInput = function() {
+    const c = window._hwComposer; if (!c) return;
+    _hwcSyncDraft();
+    c.draft.period = 'custom';
+    const sel = document.getElementById('hwc-period');
+    if (sel) sel.value = 'custom';
+    _hwcAvail();
+};
+
 function _hwcAvail() {
-    const task = document.getElementById('hwc-task')?.value || 'task4';
-    const period = document.getElementById('hwc-period')?.value || 'all';
-    const metric = document.getElementById('hwc-metric')?.value || 'lines';
+    const c = window._hwComposer; if (!c) return;
+    _hwcSyncDraft();
+    const { task, period, metric, yearStart, yearEnd } = c.draft;
     const hint = document.getElementById('hwc-avail');
-    const yearRow = document.getElementById('hwc-year-row');
-    if (yearRow) yearRow.style.display = period === 'custom' ? 'grid' : 'none';
     if (!hint) return;
+    const isCustom = period === 'custom';
+    const ys = isCustom ? yearStart : undefined, ye = isCustom ? yearEnd : undefined;
     if (metric === 'learned' && window.learnedCountInPeriod) {
-        const ys = period === 'custom' ? parseInt(document.getElementById('hwc-year-start')?.value) || 0 : undefined;
-        const ye = period === 'custom' ? parseInt(document.getElementById('hwc-year-end')?.value) || 3000 : undefined;
         const { total } = window.learnedCountInPeriod(task, period, ys, ye);
-        hint.textContent = `Доступно фактов в периоде: ${total}`;
+        hint.textContent = `Доступно фактов: ${total}`;
         hint.style.display = '';
-    } else if (period === 'custom') {
+    } else if (isCustom) {
         const cfg = window.TASK_CONFIG && window.TASK_CONFIG[task];
         if (cfg && cfg.data) {
-            const ys = parseInt(document.getElementById('hwc-year-start')?.value) || 0;
-            const ye = parseInt(document.getElementById('hwc-year-end')?.value) || 3000;
-            const count = cfg.data().filter(d => { const y = getYearFromFact(d); return y >= ys && y <= ye; }).length;
-            hint.textContent = `Фактов в диапазоне ${ys}–${ye}: ${count}`;
+            const count = cfg.data().filter(f => { const y = getYearFromFact(f); return y >= yearStart && y <= yearEnd; }).length;
+            hint.textContent = `Фактов в диапазоне ${yearStart}–${yearEnd}: ${count}`;
             hint.style.display = '';
         } else { hint.style.display = 'none'; }
     } else { hint.style.display = 'none'; }
@@ -125,16 +157,15 @@ window._hwcAvail = _hwcAvail;
 
 window._hwcAddItem = function() {
     const c = window._hwComposer; if (!c) return;
-    const task = document.getElementById('hwc-task').value;
-    const period = document.getElementById('hwc-period').value;
-    const metric = document.getElementById('hwc-metric').value;
-    let goal = parseInt(document.getElementById('hwc-goal').value);
+    _hwcSyncDraft();
+    const { task, period, metric } = c.draft;
+    let goal = parseInt(c.draft.goal);
     if (isNaN(goal) || goal <= 0) return showToast('⚠️', 'Укажите цель (> 0)', 'bg-rose-500', 'border-rose-700');
     const item = { task, period, metric, goal };
     if (period === 'custom') {
-        item.yearStart = parseInt(document.getElementById('hwc-year-start')?.value) || 0;
-        item.yearEnd = parseInt(document.getElementById('hwc-year-end')?.value) || 3000;
-        if (item.yearStart > item.yearEnd) return showToast('⚠️', 'Начальный год > конечного', 'bg-rose-500', 'border-rose-700');
+        item.yearStart = c.draft.yearStart;
+        item.yearEnd = c.draft.yearEnd;
+        if (item.yearStart > item.yearEnd) return showToast('⚠️', 'Начальный год больше конечного', 'bg-rose-500', 'border-rose-700');
     }
     if (metric === 'learned' && window.learnedCountInPeriod) {
         const { total } = window.learnedCountInPeriod(task, period, item.yearStart, item.yearEnd);
@@ -142,11 +173,13 @@ window._hwcAddItem = function() {
         item.goal = goal;
     }
     c.items.push(item);
+    c.draft.goal = ''; // сбрасываем только цель — остальное удобно оставить для следующего этапа
     _renderHwComposer();
 };
-window._hwcRemoveItem = function(i) { if (window._hwComposer) { window._hwComposer.items.splice(i, 1); _renderHwComposer(); } };
+window._hwcRemoveItem = function(i) { if (window._hwComposer) { _hwcSyncDraft(); window._hwComposer.items.splice(i, 1); _renderHwComposer(); } };
 window._hwcSetDeadline = function(days) {
     const c = window._hwComposer; if (!c) return;
+    _hwcSyncDraft();
     if (days === null) c.deadline = null;
     else { const d = new Date(); d.setDate(d.getDate() + days); c.deadline = d.toISOString().split('T')[0]; }
     _renderHwComposer();
@@ -187,7 +220,8 @@ function _renderHwComposer() {
         </div>`).join('')
         : '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:10px 0">Этапов пока нет — добавьте ниже</div>';
 
-    const sel = (id, opts, onchange) => `<select id="${id}" ${onchange ? `onchange="${onchange}"` : ''} style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:12px;font-weight:700;background:#fff;color:#111">${opts.map(o => `<option value="${o.v}">${o.t}</option>`).join('')}</select>`;
+    const d = c.draft;
+    const sel = (id, opts, onchange, selected) => `<select id="${id}" ${onchange ? `onchange="${onchange}"` : ''} style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:12px;font-weight:700;background:#fff;color:#111">${opts.map(o => `<option value="${o.v}"${o.v === selected ? ' selected' : ''}>${o.t}</option>`).join('')}</select>`;
 
     const dl = c.deadline;
     const dlBtn = (label, days) => {
@@ -208,17 +242,18 @@ function _renderHwComposer() {
 
       <div style="background:var(--card,#fff);border:1px solid rgba(128,128,128,0.18);border-radius:14px;padding:12px;margin:10px 0" class="dark:bg-[#1e1e1e]">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          ${sel('hwc-task', HWC_TASKS, 'window._hwcAvail()')}
-          ${sel('hwc-period', HWC_PERIODS, 'window._hwcAvail()')}
+          ${sel('hwc-task', HWC_TASKS, 'window._hwcAvail()', d.task)}
+          ${sel('hwc-period', HWC_PERIODS, 'window._hwcPeriodChange()', d.period)}
         </div>
-        <div id="hwc-year-row" style="display:none;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:8px">
-          <input id="hwc-year-start" type="number" min="862" max="2026" value="862" placeholder="от" oninput="window._hwcAvail()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center">
+        <label style="display:block;font-size:10px;color:#9ca3af;font-weight:700;margin-bottom:4px">Годы (от — до)</label>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:8px">
+          <input id="hwc-year-start" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearStart}" placeholder="от" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
           <span style="font-size:12px;color:#9ca3af;font-weight:800">—</span>
-          <input id="hwc-year-end" type="number" min="862" max="2026" value="2026" placeholder="до" oninput="window._hwcAvail()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center">
+          <input id="hwc-year-end" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearEnd}" placeholder="до" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
         </div>
         <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center">
-          ${sel('hwc-metric', HWC_METRICS, 'window._hwcAvail()')}
-          <input id="hwc-goal" type="number" min="1" placeholder="N" style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center">
+          ${sel('hwc-metric', HWC_METRICS, 'window._hwcAvail()', d.metric)}
+          <input id="hwc-goal" type="number" inputmode="numeric" min="1" placeholder="N" value="${d.goal}" oninput="window._hwcSyncDraft()" style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
         </div>
         <div id="hwc-avail" style="display:none;font-size:10px;color:#2563eb;font-weight:700;margin-top:6px"></div>
         <button onclick="window._hwcAddItem()" style="margin-top:10px;width:100%;background:rgba(59,130,246,0.12);color:#2563eb;border:1px dashed #3b82f6;border-radius:10px;padding:10px;font-size:12px;font-weight:900;cursor:pointer">＋ Добавить этап</button>
@@ -583,6 +618,34 @@ window.updateHwLearnBar = function() {
     const html = window.hwLearnBannerHtml();
     if (html) { el.innerHTML = html; el.classList.remove('hidden'); }
     else { el.innerHTML = ''; el.classList.add('hidden'); }
+};
+
+// Человекочитаемое название текущего периода (учитывает кастомные годы).
+window.currentPeriodLabel = function() {
+    const p = ($('filter-period') && $('filter-period').value) || 'all';
+    if (p === 'custom') {
+        const a = ($('custom-year-start') && $('custom-year-start').value) || '?';
+        const b = ($('custom-year-end') && $('custom-year-end').value) || '?';
+        return `${a}–${b} гг.`;
+    }
+    return HW_PERIOD_LABEL[p] || 'Вся история';
+};
+
+// В обычном задании (НЕ ДЗ) показываем красивую плашку периода вместо шестерёнки.
+window.updateGamePeriodChip = function() {
+    const chip = document.getElementById('game-period-chip');
+    const gear = document.getElementById('game-settings-btn');
+    if (!chip || !gear) return;
+    const inHw = !!window.state.activeHw || !!window.state.isHomeworkMode;
+    if (inHw) {
+        chip.classList.add('hidden'); chip.classList.remove('flex');
+        gear.classList.remove('hidden');
+        return;
+    }
+    const txt = document.getElementById('game-period-chip-text');
+    if (txt) txt.textContent = window.currentPeriodLabel();
+    gear.classList.add('hidden');
+    chip.classList.remove('hidden'); chip.classList.add('flex');
 };
 
 function _hwFmtDate(dl) {

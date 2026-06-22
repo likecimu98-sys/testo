@@ -85,6 +85,7 @@ window.quickStartGame = function(task, mode) {
     $('bottom-nav').classList.add('hide-nav');
     toggleMode(mode);
     if (window.updateHwLearnBar) window.updateHwLearnBar();
+    if (window.updateGamePeriodChip) window.updateGamePeriodChip();
 };
 
 window.backToLobby = function() {
@@ -119,6 +120,7 @@ window.backToLobby = function() {
     const bo = $('board-overlay');
     if (bo) bo.classList.add('hidden');
     if (window.updateHwLearnBar) window.updateHwLearnBar();
+    if (window.updateGamePeriodChip) window.updateGamePeriodChip();
     window.updateZenButton();
     updateProgressBars();
 };
@@ -225,6 +227,7 @@ window.handleSettingsChange = function() {
     else if (mode === 'visual') { if (window.renderVisualTrainer) renderVisualTrainer(true); }
     else if (mode === 'redpencil') { if (window.startRedPencilMode) startRedPencilMode(); }
     else if (window.generateTable) generateTable();
+    if (window.updateGamePeriodChip) window.updateGamePeriodChip();
 };
 
 // === ЕГЭ-БАЛЛЫ ЗА ЗАДАНИЕ ===

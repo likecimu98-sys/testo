@@ -1125,6 +1125,28 @@
                 `<div style="display:flex;align-items:center;gap:6px;font-size:10px;padding:2px 0"><span style="color:#cbd5e1;min-width:14px">${i+1}.</span><span>${em[m.task]||''}</span><span style="flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300" title="${esc(m.label)}">${esc(m.label)}</span><span style="font-weight:900;color:#ef4444;min-width:54px;text-align:right">${m.count} уч.</span></div>`).join('')
                 : '<p style="font-size:10px;color:#10b981;font-weight:700;padding:4px 0">Активных ошибок нет 🎉</p>';
 
+            // ── Прогресс выучивания: сколько фактов из общего пула выучил каждый ученик ──
+            let totalPool = 0;
+            if (typeof TASK_CONFIG !== 'undefined') {
+                ['task3','task4','task5','task7'].forEach(tk => {
+                    const cfg = TASK_CONFIG[tk];
+                    if (cfg && cfg.data) {
+                        const seen = new Set();
+                        (cfg.data() || []).forEach(f => { try { seen.add(cfg.keyFn(f)); } catch(e){} });
+                        totalPool += seen.size;
+                    }
+                });
+            }
+            const learnRows = students.map(s => ({ name: s.name || 'Без имени', learned: Math.min(s.learnedCount || 0, totalPool || (s.learnedCount||0)) }))
+                                      .sort((a,b) => b.learned - a.learned);
+            const avgLearned = learnRows.length ? Math.round(learnRows.reduce((x,r)=>x+r.learned,0)/learnRows.length) : 0;
+            const avgPct = totalPool ? Math.round(avgLearned/totalPool*100) : 0;
+            const learnColor = pc => pc>=66?'#10b981':pc>=33?'#f59e0b':'#f43f5e';
+            const learnHtml = (totalPool && learnRows.length) ? learnRows.map(r => {
+                const pc = Math.round(r.learned/totalPool*100), col = learnColor(pc);
+                return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;margin-bottom:3px"><span style="min-width:84px;color:#334155;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300" title="${esc(r.name)}">${esc(r.name)}</span><div style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${col}"></div></div><span style="min-width:70px;text-align:right;font-weight:700;color:${col}">${r.learned}<span style="color:#cbd5e1;font-weight:400">/${totalPool}</span> · ${pc}%</span></div>`;
+            }).join('') : '<p style="font-size:10px;color:#94a3b8">Нет данных</p>';
+
             cont.innerHTML = `
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:2px 0 4px">Решено по заданиям (− активные ошибки)</div>
               <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">${solvedHtml}</div>
@@ -1132,6 +1154,8 @@
               ${hwTimingTotal ? `<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px">⏱ Сдают вовремя: <b style="color:${hwOnTimePct>=80?'#10b981':hwOnTimePct>=50?'#f59e0b':'#f43f5e'}">${hwOnTimePct}%</b> <span style="color:#94a3b8;font-weight:400">(вовремя ${hwOnTimeSum} · с опозданием ${hwLateSum})</span></div>`:''}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:8px 0 4px">Точность класса по эпохам</div>
               ${eraHtml || '<p style="font-size:10px;color:#94a3b8">Нет данных</p>'}
+              <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:10px 0 4px">📚 Выучено фактов${totalPool?` · в среднем ${avgLearned}/${totalPool} (${avgPct}%)`:''}</div>
+              ${learnHtml}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:10px 0 4px">🔥 Где класс чаще ошибается</div>
               ${mistHtml}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:10px 0 4px">📋 Не сдали ДЗ${debtors.length?` (${debtors.length})`:''}</div>

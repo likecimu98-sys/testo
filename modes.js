@@ -307,15 +307,27 @@ function cleanMapLegendText(fact, text) {
         else if (idx === 0) value = value.slice(part.length).trim();
     });
     value = value
+        // Общая склейка слов: строчная буква (или закрывающая скобка), сразу за ней заглавная
+        // кириллическая — почти всегда артефакт PDF-парсинга ("ЗолотаяОрда" → "Золотая Орда", ")На" → ") На").
+        .replace(/([а-яё)])([А-Я])/g, '$1 $2')
+        // Римские маркеры на латинице (I/V/X) тоже склеиваются: "ДунайI -" → "Дунай I -".
+        .replace(/([а-яё)])([IVX]{1,3}\s*[-–—])/g, '$1 $2')
+        // Точка/запятая без пробела перед заглавной: "рабство.Российское" → "рабство. Российское".
+        .replace(/([а-яё])([.,])([А-Я])/g, '$1$2 $3')
+        // Прилипшая открывающая скобка: "США(Портсмут)" → "США (Портсмут)", «Варяг»(Руднев) → «Варяг» (Руднев).
+        .replace(/([а-яёА-Я»"])\(/g, '$1 (')
+        // Частые склейки с предлогами (строчная+строчная — общим правилом не ловятся).
         .replace(/поитогам/gi, 'по итогам')
-        .replace(/иНиштадт/gi, 'и Ништадт')
-        .replace(/иПетербург/gi, 'и Петербург')
-        .replace(/соШвец/gi, 'со Швец')
-        .replace(/поСтолбов/gi, 'по Столбов')
-        .replace(/иДеулин/gi, 'и Деулин')
+        .replace(/влетописях/gi, 'в летописях')
+        .replace(/стороныкрасных/gi, 'стороны красных')
+        .replace(/польскаявойна/gi, 'польская война')
+        .replace(/Нагасакиподверглись/gi, 'Нагасаки подверглись')
+        .replace(/ещесуществовало/gi, 'еще существовало')
+        .replace(/правительствосохраняло/gi, 'правительство сохраняло')
         .replace(/другихземлепроходцев/gi, 'других землепроходцев')
         .replace(/неспрашивают/gi, 'не спрашивают')
         .replace(/\s+история$/i, '')
+        .replace(/\s{2,}/g, ' ')
         .replace(/^[\s;,.\-]+|[\s;,.\-]+$/g, '');
     return value;
 }
@@ -561,6 +573,50 @@ function renderMediaStudyCard(fact, progressText) {
     </div>`;
 }
 
+// Лицевая сторона (обычный режим) — «название».
+const FC_LABEL = { task3: 'Процесс', task4: 'Событие', task5: 'Участник', task7: 'Памятник культуры' };
+const FC_TITLE = { task3: f => f.process, task4: f => f.event, task5: f => f.person, task7: f => f.culture };
+// Лицевая сторона в перевёрнутом режиме — спрашиваем название по факту.
+const FC_REVERSE_LABEL = { task3: 'Назови процесс', task4: 'Назови событие', task5: 'Назови личность', task7: 'Назови памятник' };
+
+// HTML «детали» (оборот в обычном режиме / лицо в перевёрнутом): год, место, событие, характеристика.
+function _fcDetailContent(fact, task) {
+    const contentMap = {
+        task3: () => `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-emerald-100 dark:border-[#2c2c2c] w-full text-center mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Факт</span><span class="text-[14px] font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">${fact.fact}</span></div><div class="bg-white dark:bg-[#181818]/50 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Год</span><span class="text-2xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div>`,
+        task4: () => {
+            let mapLink = '';
+            if (fact.geo && typeof geoDict !== 'undefined' && geoDict[fact.geo]) mapLink = `<span onclick="event.stopPropagation();window.openMapModal('${fact.geo}')" class="mt-2 text-[12px] font-bold text-blue-600 underline decoration-dashed cursor-pointer">Показать на карте</span>`;
+            return `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Год</span><span class="text-3xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div><div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-green-100 dark:border-[#2c2c2c] flex flex-col items-center w-full"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Место</span><span class="text-xl font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">${fact.geo}</span>${mapLink}</div>`;
+        },
+        task5: () => `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-purple-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Событие</span><span class="text-lg sm:text-xl font-bold text-purple-700 dark:text-purple-400 leading-relaxed">${fact.event}</span></div>`,
+        task7: () => fact.image ? renderMediaFactBack(fact) : `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-amber-100 dark:border-[#2c2c2c] w-full text-center mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Характеристика</span><span class="text-[14px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed">${fact.trait}</span></div><div class="bg-white dark:bg-[#181818]/50 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Создание</span><span class="text-2xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div>`,
+    };
+    return (contentMap[task] || contentMap.task4)();
+}
+
+// HTML «название» как ответ (оборот в перевёрнутом режиме). Цвета — инлайном, чтобы не зависеть от purge Tailwind.
+function _fcTitleAnswerHtml(fact, task) {
+    const palette = { task3: '#059669', task4: '#2563eb', task5: '#9333ea', task7: '#d97706' };
+    const col = palette[task] || '#2563eb';
+    const title = (FC_TITLE[task] || FC_TITLE.task4)(fact);
+    return `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">${FC_LABEL[task] || 'Ответ'}</span><span class="text-xl sm:text-2xl font-bold leading-relaxed" style="color:${col}">${title}</span></div>`;
+}
+
+// Переключатель направления карточек (доступен только для текстовых заданий).
+function _fcReverseToggleHtml() {
+    const on = !!window.state.flashcardReverse;
+    const cls = on
+        ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40'
+        : 'bg-gray-100 text-gray-500 border-gray-200 dark:bg-[#2c2c2c] dark:text-gray-400 dark:border-[#3f3f46]';
+    return `<div class="w-full max-w-md flex justify-center mb-3"><button onclick="window.toggleFlashcardReverse()" class="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider px-3 py-1.5 rounded-full border transition-colors active:scale-95 ${cls}">🔄 ${on ? 'Факт → название' : 'Название → факт'}</button></div>`;
+}
+
+window.toggleFlashcardReverse = function() {
+    window.state.flashcardReverse = !window.state.flashcardReverse;
+    haptic('light');
+    window.nextFlashcard();
+};
+
 window.nextFlashcard = function() {
     const area = $('flashcard-area');
     const tabs = cultureLearningTabsHtml();
@@ -574,17 +630,21 @@ window.nextFlashcard = function() {
     const task = window.state.currentTask;
     const cfg = TASK_CONFIG[task];
 
-    const labelMap = { task3: 'Процесс', task4: 'Событие', task5: 'Участник', task7: 'Памятник культуры' };
-    const titleMap = { task3: f => f.process, task4: f => f.event, task5: f => f.person, task7: f => f.culture };
+    // Перевёрнутый режим только для текстовых заданий (медиа-карточки с картинками — нет).
+    const reverse = !!window.state.flashcardReverse && !fact.image && !isMediaLearningTask(task);
+    const showToggle = !fact.image && !isMediaLearningTask(task);
 
-    area.innerHTML = tabs;
+    area.innerHTML = tabs + (showToggle ? _fcReverseToggleHtml() : '');
     if (fact.image) {
         area.insertAdjacentHTML('beforeend', renderMediaFlashcardFront(fact, d));
+    } else if (reverse) {
+        const badge = `Ур: ${d ? d.level || 0 : 0} | Балл: ${d ? (d.points || 0).toFixed(1) : 0}/3`;
+        area.insertAdjacentHTML('beforeend', `<div class="w-full max-w-md bg-white dark:bg-[#1e1e1e] rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.4)] p-6 min-h-[300px] flex flex-col items-center justify-center text-center cursor-pointer border-2 border-dashed border-amber-300 dark:border-amber-500/40 hover:border-amber-400 transition-all duration-300 relative group" onclick="window.flipFlashcard(this)" data-reverse="1"><div class="absolute top-4 left-4 bg-gray-100 dark:bg-[#2c2c2c] px-2 py-1 rounded text-[12px] font-bold text-gray-500 shadow-sm border border-gray-200 dark:border-[#3f3f46]">${badge}</div><span class="text-[12px] font-black text-amber-500 uppercase tracking-[0.2em] mb-4">${FC_REVERSE_LABEL[task] || 'Назови ответ'}</span><div class="w-full">${_fcDetailContent(fact, task)}</div><p class="text-[12px] font-bold text-amber-500 mt-6 opacity-70 animate-pulse uppercase tracking-wider">Коснись, чтобы перевернуть</p></div>`);
     } else {
         const tpl = $('flashcard-template-front').content.cloneNode(true);
         tpl.querySelector('.fc-level-badge').innerText = `Ур: ${d ? d.level || 0 : 0} | Балл: ${d ? (d.points || 0).toFixed(1) : 0}/3`;
-        tpl.querySelector('.fc-label').innerText = labelMap[task] || 'Событие';
-        tpl.querySelector('.fc-title').innerText = titleMap[task](fact);
+        tpl.querySelector('.fc-label').innerText = FC_LABEL[task] || 'Событие';
+        tpl.querySelector('.fc-title').innerText = (FC_TITLE[task] || FC_TITLE.task4)(fact);
         area.appendChild(tpl);
     }
     window.state.currentFlashcardFact = fact;
@@ -596,21 +656,11 @@ window.flipFlashcard = function(card) {
     haptic('medium');
     const fact = window.state.currentFlashcardFact;
     const task = window.state.currentTask;
+    const reverse = card.dataset.reverse === '1';
     card.className = fact.image
         ? "culture-media-flashcard media-back-card flipped"
         : "w-full max-w-md bg-blue-50 dark:bg-[#1e1e1e] rounded-3xl shadow-[0_8px_30px_rgba(59,130,246,0.15)] p-6 min-h-[300px] flex flex-col items-center justify-center text-center border-2 border-blue-200 dark:border-[#2c2c2c] transition-all duration-300 relative flipped";
     card.onclick = null;
-
-    const contentMap = {
-        task3: () => `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-emerald-100 dark:border-[#2c2c2c] w-full text-center mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Факт</span><span class="text-[14px] font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">${fact.fact}</span></div><div class="bg-white dark:bg-[#181818]/50 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Год</span><span class="text-2xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div>`,
-        task4: () => {
-            let mapLink = '';
-            if (fact.geo && typeof geoDict !== 'undefined' && geoDict[fact.geo]) mapLink = `<span onclick="window.openMapModal('${fact.geo}')" class="mt-2 text-[12px] font-bold text-blue-600 underline decoration-dashed cursor-pointer">Показать на карте</span>`;
-            return `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Год</span><span class="text-3xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div><div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-green-100 dark:border-[#2c2c2c] flex flex-col items-center w-full"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Место</span><span class="text-xl font-bold text-emerald-700 dark:text-emerald-400 leading-relaxed">${fact.geo}</span>${mapLink}</div>`;
-        },
-        task5: () => `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-purple-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Событие</span><span class="text-lg sm:text-xl font-bold text-purple-700 dark:text-purple-400 leading-relaxed">${fact.event}</span></div>`,
-        task7: () => fact.image ? renderMediaFactBack(fact) : `<div class="bg-white dark:bg-[#181818]/50 p-5 rounded-2xl shadow-sm border border-amber-100 dark:border-[#2c2c2c] w-full text-center mb-3"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Характеристика</span><span class="text-[14px] font-bold text-amber-700 dark:text-amber-400 leading-relaxed">${fact.trait}</span></div><div class="bg-white dark:bg-[#181818]/50 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-[#2c2c2c] w-full text-center"><span class="text-[10px] text-gray-400 uppercase font-black block mb-1 tracking-widest">Создание</span><span class="text-2xl font-black text-examBlue dark:text-blue-300">${fact.year}</span></div>`,
-    };
 
     if (fact.image) {
         card.innerHTML = `${renderMediaFactBack(fact)}
@@ -624,7 +674,7 @@ window.flipFlashcard = function(card) {
     }
 
     const tpl = $('flashcard-template-back').content.cloneNode(true);
-    tpl.querySelector('.fc-content').innerHTML = (contentMap[task] || contentMap.task4)();
+    tpl.querySelector('.fc-content').innerHTML = reverse ? _fcTitleAnswerHtml(fact, task) : _fcDetailContent(fact, task);
     card.innerHTML = '';
     card.appendChild(tpl);
     setTimeout(() => window.updateZenButton(), 50);
