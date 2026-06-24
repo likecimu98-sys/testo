@@ -46,10 +46,10 @@ function showVisualMistakeCard(item, step) {
         <div style="display:flex;align-items:flex-start;gap:0.75rem;">
             <div style="width:2.25rem;height:2.25rem;border-radius:999px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;flex:0 0 auto;font-size:1.15rem;">✕</div>
             <div style="min-width:0;flex:1;">
-                <div style="font-size:0.68rem;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:#ef4444;margin-bottom:0.18rem;">Разбор ошибки</div>
+                <div style="font-size:0.68rem;font-weight:900;letter-spacing:0.12em;text-transform:uppercase;color:var(--c-danger);margin-bottom:0.18rem;">Разбор ошибки</div>
                 <div style="font-size:0.98rem;font-weight:900;color:#111827;line-height:1.15;margin-bottom:0.35rem;">${visualEscape(item.title)}</div>
                 <div style="font-size:0.78rem;font-weight:700;color:#475569;line-height:1.35;">${visualEscape(facts)}</div>
-                <div style="margin-top:0.35rem;font-size:0.78rem;font-weight:900;color:#2563eb;">${visualEscape(visualFactLabel(step.factType))}: ${visualEscape(visualAnswerText(step.correctAnswer))}</div>
+                <div style="margin-top:0.35rem;font-size:0.78rem;font-weight:900;color:var(--c-brand-strong);">${visualEscape(visualFactLabel(step.factType))}: ${visualEscape(visualAnswerText(step.correctAnswer))}</div>
             </div>
         </div>`;
     card.style.cssText = [
@@ -590,7 +590,7 @@ window.answerVisualStep = function(optionKey) {
             } else {
                 window.state.currentVisualId = item.id;
                 setTimeout(() => {
-                    if (feedback) feedback.innerHTML = `<span style="color:#2563eb;">✅ Все характеристики верны! <b>${visualEscape(item.title)}</b> — серия ${progress.streak}/2</span>`;
+                    if (feedback) feedback.innerHTML = `<span style="color:var(--c-brand-strong);">✅ Все характеристики верны! <b>${visualEscape(item.title)}</b> — серия ${progress.streak}/2</span>`;
                 }, correct ? 300 : 800);
             }
         } else {

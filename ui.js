@@ -61,7 +61,8 @@ const HWC_TASKS = [
     { v: 'task4', t: '📍 №4 География' },
     { v: 'task3', t: '🔗 №3 Процессы' },
     { v: 'task5', t: '👤 №5 Личности' },
-    { v: 'task7', t: '🎨 №7 Культура' }
+    { v: 'task7', t: '🎨 №7 Культура' },
+    { v: 'cram',  t: '⚡ Зубрёжка дат' }
 ];
 const HWC_PERIODS = [
     { v: 'all', t: 'Вся история' }, { v: 'early', t: 'До XVIII в.' },
@@ -137,6 +138,14 @@ function _hwcAvail() {
     _hwcSyncDraft();
     const { task, period, metric, yearStart, yearEnd } = c.draft;
     const hint = document.getElementById('hwc-avail');
+    // Зубрёжка: период/метрика не нужны — цель всегда «вызубрить N дат». Прячем лишние контролы.
+    const cramExtra = document.getElementById('hwc-noncram-rows');
+    if (cramExtra) cramExtra.style.display = task === 'cram' ? 'none' : '';
+    if (task === 'cram') {
+        c.draft.metric = 'learned';
+        if (hint) { hint.textContent = '⚡ Ученик зубрит даты (выбор → ввод). Цель — N выученных фактов.'; hint.style.display = ''; }
+        return;
+    }
     if (!hint) return;
     const isCustom = period === 'custom';
     const ys = isCustom ? yearStart : undefined, ye = isCustom ? yearEnd : undefined;
@@ -161,6 +170,12 @@ window._hwcAddItem = function() {
     const { task, period, metric } = c.draft;
     let goal = parseInt(c.draft.goal);
     if (isNaN(goal) || goal <= 0) return showToast('⚠️', 'Укажите цель (> 0)', 'bg-rose-500', 'border-rose-700');
+    // Зубрёжка — отдельный этап без периода: «вызубрить N дат» (любые блоки тренажёра).
+    if (task === 'cram') {
+        c.items.push({ task: 'cram', metric: 'learned', goal });
+        c.draft.goal = '';
+        return _renderHwComposer();
+    }
     const item = { task, period, metric, goal };
     if (period === 'custom') {
         item.yearStart = c.draft.yearStart;
@@ -207,16 +222,18 @@ function _renderHwComposer() {
         ? `Весь класс — ${c.target.count} ${c.target.count === 1 ? 'ученик' : 'учеников'}`
         : c.target.name;
     const metricUnit = { lines: 'строк', points: 'баллов', learned: 'фактов' };
-    const taskShort = { task3: '🔗№3', task4: '📍№4', task5: '👤№5', task7: '🎨№7' };
+    const taskShort = { task3: '🔗№3', task4: '📍№4', task5: '👤№5', task7: '🎨№7', cram: '⚡Зубрёжка' };
     const periodShort = Object.fromEntries(HWC_PERIODS.map(p => [p.v, p.t]));
+    const itemScope = it => it.task === 'cram' ? 'даты (любые блоки)'
+        : (it.period === 'custom' ? (it.yearStart || '?') + '–' + (it.yearEnd || '?') + ' гг.' : (periodShort[it.period] || it.period));
 
     const itemsHtml = c.items.length ? c.items.map((it, i) => `
         <div style="display:flex;align-items:center;gap:8px;background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:8px 10px;margin-bottom:6px">
           <div style="flex:1;min-width:0">
             <div style="font-size:12px;font-weight:800;color:#111" class="dark:text-gray-100">Этап ${i + 1}: ${taskShort[it.task] || it.task}</div>
-            <div style="font-size:10px;color:#6b7280">${it.goal} ${metricUnit[it.metric]} · ${it.period === 'custom' ? (it.yearStart || '?') + '–' + (it.yearEnd || '?') + ' гг.' : (periodShort[it.period] || it.period)}</div>
+            <div style="font-size:10px;color:#6b7280">${it.goal} ${metricUnit[it.metric]} · ${itemScope(it)}</div>
           </div>
-          <button onclick="window._hwcRemoveItem(${i})" style="background:none;border:none;color:#ef4444;font-size:16px;cursor:pointer;padding:2px 6px">🗑</button>
+          <button onclick="window._hwcRemoveItem(${i})" style="background:none;border:none;color:var(--c-danger);font-size:16px;cursor:pointer;padding:2px 6px">🗑</button>
         </div>`).join('')
         : '<div style="font-size:12px;color:#9ca3af;text-align:center;padding:10px 0">Этапов пока нет — добавьте ниже</div>';
 
@@ -241,22 +258,21 @@ function _renderHwComposer() {
       ${itemsHtml}
 
       <div style="background:var(--card,#fff);border:1px solid rgba(128,128,128,0.18);border-radius:14px;padding:12px;margin:10px 0" class="dark:bg-[#1e1e1e]">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          ${sel('hwc-task', HWC_TASKS, 'window._hwcAvail()', d.task)}
-          ${sel('hwc-period', HWC_PERIODS, 'window._hwcPeriodChange()', d.period)}
+        <div style="margin-bottom:8px">${sel('hwc-task', HWC_TASKS, 'window._hwcAvail()', d.task)}</div>
+        <div id="hwc-noncram-rows">
+          <div style="margin-bottom:8px">${sel('hwc-period', HWC_PERIODS, 'window._hwcPeriodChange()', d.period)}</div>
+          <label style="display:block;font-size:10px;color:#9ca3af;font-weight:700;margin-bottom:4px">Годы (от — до)</label>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:8px">
+            <input id="hwc-year-start" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearStart}" placeholder="от" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
+            <span style="font-size:12px;color:#9ca3af;font-weight:800">—</span>
+            <input id="hwc-year-end" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearEnd}" placeholder="до" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
+          </div>
+          <div style="margin-bottom:8px">${sel('hwc-metric', HWC_METRICS, 'window._hwcAvail()', d.metric)}</div>
         </div>
-        <label style="display:block;font-size:10px;color:#9ca3af;font-weight:700;margin-bottom:4px">Годы (от — до)</label>
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center;margin-bottom:8px">
-          <input id="hwc-year-start" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearStart}" placeholder="от" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
-          <span style="font-size:12px;color:#9ca3af;font-weight:800">—</span>
-          <input id="hwc-year-end" type="number" inputmode="numeric" min="800" max="2030" value="${d.yearEnd}" placeholder="до" oninput="window._hwcYearInput()" style="width:100%;padding:8px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 90px;gap:8px;align-items:center">
-          ${sel('hwc-metric', HWC_METRICS, 'window._hwcAvail()', d.metric)}
-          <input id="hwc-goal" type="number" inputmode="numeric" min="1" placeholder="N" value="${d.goal}" oninput="window._hwcSyncDraft()" style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
-        </div>
-        <div id="hwc-avail" style="display:none;font-size:10px;color:#2563eb;font-weight:700;margin-top:6px"></div>
-        <button onclick="window._hwcAddItem()" style="margin-top:10px;width:100%;background:rgba(59,130,246,0.12);color:#2563eb;border:1px dashed #3b82f6;border-radius:10px;padding:10px;font-size:12px;font-weight:900;cursor:pointer">＋ Добавить этап</button>
+        <label style="display:block;font-size:10px;color:#9ca3af;font-weight:700;margin-bottom:4px">Цель (сколько)</label>
+        <input id="hwc-goal" type="number" inputmode="numeric" min="1" placeholder="N" value="${d.goal}" oninput="window._hwcSyncDraft()" style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:13px;font-weight:800;text-align:center;background:#fff;color:#111">
+        <div id="hwc-avail" style="display:none;font-size:10px;color:var(--c-brand-strong);font-weight:700;margin-top:6px"></div>
+        <button onclick="window._hwcAddItem()" style="margin-top:10px;width:100%;background:rgba(59,130,246,0.12);color:var(--c-brand-strong);border:1px dashed var(--c-brand);border-radius:10px;padding:10px;font-size:12px;font-weight:900;cursor:pointer">＋ Добавить этап</button>
       </div>
 
       <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin:8px 0 6px">Срок сдачи</div>
@@ -265,7 +281,7 @@ function _renderHwComposer() {
       </div>
       <input type="date" value="${dl || ''}" onchange="window._hwcSetDeadlineDate(this.value)" style="width:100%;padding:9px;border:1px solid rgba(128,128,128,0.3);border-radius:10px;font-size:12px;margin-bottom:14px">
 
-      <button onclick="window._hwcSubmit()" style="width:100%;background:#10b981;color:#fff;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:900;cursor:pointer">
+      <button onclick="window._hwcSubmit()" style="width:100%;background:var(--c-success);color:#fff;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:900;cursor:pointer">
         ✅ Выдать ДЗ${c.items.length ? ` (${c.items.length} этап.)` : ''}
       </button>
     </div>`;
@@ -412,12 +428,15 @@ window.checkCustomPeriod = function() { $('pg-custom-period-container').classLis
 window.setPgRows = function(rows) { $$('.pg-row-btn').forEach(btn => btn.className = "pg-row-btn bg-white border-gray-200 text-gray-600 dark:bg-[#2c2c2c] dark:border-[#3f3f46] dark:text-gray-400 border-2 rounded-xl py-3 font-black text-sm transition-colors"); const active = $(`btn-row-${rows}`); if (active) active.className = "pg-row-btn bg-blue-50 border-blue-500 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 border-2 rounded-xl py-3 font-black text-sm transition-colors"; $('filter-rows').value = rows; };
 
 window.applyGlobalSettings = function() {
-    haptic('medium'); 
-    $('filter-period').value = $('pg-filter-period').value; 
-    $('custom-year-start').value = $('pg-custom-year-start').value; 
+    haptic('medium');
+    $('filter-period').value = $('pg-filter-period').value;
+    $('custom-year-start').value = $('pg-custom-year-start').value;
     $('custom-year-end').value = $('pg-custom-year-end').value;
     $('filter-case').value = $('pg-filter-case').value;
-    
+    // Ученик явно выбрал период — теперь плашка показывает выбранные годы вместо «Выбрать период».
+    window.state.periodChosen = true;
+    try { localStorage.setItem('ege_period_chosen', '1'); } catch (e) {}
+
     saveProgress();
     closePreGameModal();
     
@@ -461,7 +480,9 @@ function updateSkinPicker(activeSkin) {
 // Apply skin on page load — тема по умолчанию: необрутализм (constructivism)
 const DEFAULT_SKIN = 'constructivism';
 (function() {
-    const saved = localStorage.getItem('ege_skin') || DEFAULT_SKIN;
+    let saved = localStorage.getItem('ege_skin') || DEFAULT_SKIN;
+    // Легаси/удалённые скины (старая система beresta/cyberpunk/… больше не существует) → дефолт.
+    if (!SKINS.includes(saved)) { saved = DEFAULT_SKIN; localStorage.setItem('ege_skin', saved); }
     SKINS.forEach(s => document.body.classList.remove('skin-' + s));
     if (saved !== 'aurora') document.body.classList.add('skin-' + saved);
 })();
@@ -554,16 +575,16 @@ window.showHwTasksSequential = function() {
           </div>
 
           <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:14px;padding:14px 16px;margin-bottom:14px">
-            <div style="font-size:28px;font-weight:900;color:#ef4444;line-height:1">${t.cnt} <span style="font-size:14px;font-weight:600;color:#9ca3af">строк</span></div>
+            <div style="font-size:28px;font-weight:900;color:var(--c-danger);line-height:1">${t.cnt} <span style="font-size:14px;font-weight:600;color:#9ca3af">строк</span></div>
             <div style="font-size:11px;color:#9ca3af;margin-top:4px">Задание ${idx+1} из ${tasks.length} · всего ${total} строк${dlStr}</div>
             <div style="display:flex;gap:4px;margin-top:10px">
-              ${tasks.map((tt, i) => `<div style="flex:1;height:4px;border-radius:2px;background:${i < idx ? '#10b981' : i === idx ? '#ef4444' : 'rgba(0,0,0,0.1)'}"></div>`).join('')}
+              ${tasks.map((tt, i) => `<div style="flex:1;height:4px;border-radius:2px;background:${i < idx ? 'var(--c-success)' : i === idx ? 'var(--c-danger)' : 'rgba(0,0,0,0.1)'}"></div>`).join('')}
             </div>
           </div>
 
           <div style="display:flex;flex-direction:column;gap:8px">
             <button onclick="(function(){document.getElementById('${overlayId}').remove();quickStartGame('${t.key}','normal');})()"
-              style="width:100%;background:#ef4444;color:#fff;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:900;cursor:pointer;letter-spacing:.02em">
+              style="width:100%;background:var(--c-danger);color:#fff;border:none;border-radius:14px;padding:14px;font-size:14px;font-weight:900;cursor:pointer;letter-spacing:.02em">
               ▶ Начать ${t.emoji} ${t.name}
             </button>
             ${!isLast ? `<button onclick="(function(){window._hwSeqIdx=(window._hwSeqIdx||0)+1;document.getElementById('${overlayId}')._nextStep&&document.getElementById('${overlayId}')._nextStep();})()"
@@ -582,15 +603,16 @@ const HW_TASK_META = {
     task3: { emoji: '🔗', name: 'Задание №3 — Процессы' },
     task4: { emoji: '📍', name: 'Задание №4 — География' },
     task5: { emoji: '👤', name: 'Задание №5 — Личности' },
-    task7: { emoji: '🎨', name: 'Задание №7 — Культура' }
+    task7: { emoji: '🎨', name: 'Задание №7 — Культура' },
+    cram:  { emoji: '⚡', name: 'Зубрёжка дат' }
 };
 const HW_PERIOD_LABEL = { all: 'Вся история', early: 'До XVIII в.', '18th': 'XVIII век', '19th': 'XIX век', '20th': 'XX век', custom: 'Свои годы' };
 const HW_METRIC_META = {
-    lines:   { unit: 'строк',  verb: 'Решить',  mode: 'normal', color: '#3b82f6' },
-    points:  { unit: 'баллов', verb: 'Набрать', mode: 'normal', color: '#8b5cf6' },
+    lines:   { unit: 'строк',  verb: 'Решить',  mode: 'normal', color: 'var(--c-brand)' },
+    points:  { unit: 'баллов', verb: 'Набрать', mode: 'normal', color: 'var(--c-purple)' },
     // Выучивание идёт В САМОМ ЗАДАНИИ (строки 3/4/5/7): ученик «заходит решать», факты периода
     // учитываются общей системой приложения (isFactLearned). Уже выученные — автозачёт. Прогресс — живой счёт.
-    learned: { unit: 'фактов', verb: 'Выучить', mode: 'normal', color: '#10b981' }
+    learned: { unit: 'фактов', verb: 'Выучить', mode: 'normal', color: 'var(--c-success)' }
 };
 
 // Плашка прогресса режима выучивания (learned-ДЗ): показывается на игровом экране над заданием.
@@ -607,7 +629,7 @@ window.hwLearnBannerHtml = function() {
       <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:800;color:#059669;margin-bottom:5px">
         <span>📚 Выучивание · ДЗ</span><span>Выучено ${done} / ${goal}</span></div>
       <div style="height:7px;background:rgba(16,185,129,0.18);border-radius:6px;overflow:hidden">
-        <div style="height:100%;width:${pct}%;background:#10b981;border-radius:6px;transition:width .3s"></div></div>
+        <div style="height:100%;width:${pct}%;background:var(--c-success);border-radius:6px;transition:width .3s"></div></div>
     </div>`;
 };
 
@@ -643,9 +665,78 @@ window.updateGamePeriodChip = function() {
         return;
     }
     const txt = document.getElementById('game-period-chip-text');
-    if (txt) txt.textContent = window.currentPeriodLabel();
+    // До первого осознанного выбора показываем призыв «Выбрать период», после — выбранные годы.
+    const chosen = window.state.periodChosen || (() => { try { return localStorage.getItem('ege_period_chosen') === '1'; } catch (e) { return false; } })();
+    if (txt) txt.textContent = chosen ? window.currentPeriodLabel() : 'Выбрать период';
     gear.classList.add('hidden');
     chip.classList.remove('hidden'); chip.classList.add('flex');
+};
+
+// ── Режим «Зубрёжка» (изолированный iframe cram.html) ──
+// Открываем полноэкранный тренажёр дат. Необязательный arg — id колоды (для ДЗ-диплинка).
+window.openCram = function(deckId) {
+    haptic('light');
+    const ov = document.getElementById('cram-overlay');
+    const frame = document.getElementById('cram-frame');
+    if (!ov || !frame) return;
+    const hash = deckId ? ('#deck=' + encodeURIComponent(deckId)) : '';
+    // Перезагружаем src каждый раз, чтобы подхватить диплинк и свежий прогресс.
+    frame.src = 'cram.html' + hash;
+    ov.style.display = ''; // сбрасываем инлайн display:none, если он остался от запасного выхода
+    ov.classList.remove('hidden');
+    document.body.classList.add('cram-open');
+};
+
+window.closeCram = function() {
+    const ov = document.getElementById('cram-overlay');
+    if (ov) { ov.classList.add('hidden'); ov.style.display = ''; }
+    document.body.classList.remove('cram-open');
+    // Прогресс «выучено» мог измениться — обновим интерфейс и ДЗ.
+    if (window.refreshHwState) window.refreshHwState();
+    if (window.updateGlobalUI) window.updateGlobalUI();
+    if (window.updateHwNavBadge) window.updateHwNavBadge();
+};
+
+// Запасной канал выхода из iframe «Зубрёжки» (если прямой вызов closeCram недоступен).
+window.addEventListener('message', function(e) {
+    if (e && e.data && e.data.type === 'cram-exit') window.closeCram();
+});
+
+// Вызывается из iframe при полном освоении факта (фаза ввода пройдена).
+// Засчитываем факт в общую систему «выучено» (factStreaks), чтобы он шёл в SRS и счётчик.
+window.cramMastered = function(payload) {
+    try {
+        if (!payload || !payload.key || !window.state || !window.state.stats) return;
+        const fs = window.state.stats.factStreaks = window.state.stats.factStreaks || {};
+        const k = 'cram:' + String(payload.key);
+        const now = Date.now();
+        const cur = fs[k] || {};
+        // Помечаем как выученный (level≥1, points≥3) с интервалом повторения ~3 дня.
+        fs[k] = {
+            points: Math.max(3, cur.points || 0),
+            level: Math.max(1, cur.level || 0),
+            nextReview: now + 3 * 86400000,
+            lastUpdated: now,
+            cram: true,
+            label: payload.label || ''
+        };
+        if (window.saveProgress) window.saveProgress();
+        if (window.refreshHwState) window.refreshHwState();
+        if (window.updateGlobalUI) window.updateGlobalUI();
+        if (window.updateHwNavBadge) window.updateHwNavBadge();
+    } catch (e) { console.warn('cramMastered error', e); }
+};
+
+// Сколько фактов зубрёжки выучено (для ДЗ-метрики). Опционально по префиксу колоды.
+window.cramLearnedCount = function(deckPrefix) {
+    const fs = (window.state && window.state.stats && window.state.stats.factStreaks) || {};
+    let n = 0;
+    for (const k in fs) {
+        if (k.indexOf('cram:') !== 0) continue;
+        if (deckPrefix && k.indexOf('cram:' + deckPrefix) !== 0) continue;
+        if (window.isFactLearned && window.isFactLearned(fs[k])) n++;
+    }
+    return n;
 };
 
 function _hwFmtDate(dl) {
@@ -679,7 +770,8 @@ function _hwItemRow(it, idx, kind) {
     const prog = window.hwItemProgress(it), goal = it.goal || 0;
     const pct = goal ? Math.min(100, Math.round(prog / goal * 100)) : 0;
     const done = window.hwItemDone(it);
-    const periodLabel = it.period === 'custom' ? (it.yearStart || '?') + '–' + (it.yearEnd || '?') + ' гг.' : (HW_PERIOD_LABEL[it.period] || '');
+    const periodLabel = it.task === 'cram' ? 'тренажёр дат'
+        : (it.period === 'custom' ? (it.yearStart || '?') + '–' + (it.yearEnd || '?') + ' гг.' : (HW_PERIOD_LABEL[it.period] || ''));
     const tick = done ? '✅' : '▢';
     return `
       <div style="display:flex;gap:8px;align-items:center;padding:6px 0">
@@ -688,10 +780,10 @@ function _hwItemRow(it, idx, kind) {
           <div style="font-size:12px;font-weight:800;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" class="dark:text-gray-100">${m.emoji} ${m.name}</div>
           <div style="font-size:10px;color:#9ca3af;margin:1px 0 3px">${mm.verb} ${goal} ${mm.unit} · ${periodLabel}</div>
           <div style="width:100%;height:5px;background:rgba(128,128,128,0.15);border-radius:3px;overflow:hidden">
-            <div style="height:100%;width:${pct}%;background:${done ? '#10b981' : mm.color};border-radius:3px;transition:width .3s"></div>
+            <div style="height:100%;width:${pct}%;background:${done ? 'var(--c-success)' : mm.color};border-radius:3px;transition:width .3s"></div>
           </div>
         </div>
-        <span style="font-size:11px;font-weight:900;color:${done ? '#10b981' : '#6b7280'};flex-shrink:0;min-width:42px;text-align:right">${prog}/${goal}</span>
+        <span style="font-size:11px;font-weight:900;color:${done ? 'var(--c-success)' : '#6b7280'};flex-shrink:0;min-width:42px;text-align:right">${prog}/${goal}</span>
       </div>`;
 }
 
@@ -714,18 +806,18 @@ window.openHwTab = function() {
         let headBadge, btn = '';
         if (kind === 'done') {
             headBadge = a.onTime
-                ? '<span style="background:#10b981;color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">✅ Сдано вовремя</span>'
-                : '<span style="background:#f59e0b;color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">⌛ Сдано с опозданием</span>';
+                ? '<span style="background:var(--c-success);color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">✅ Сдано вовремя</span>'
+                : '<span style="background:var(--c-warn);color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">⌛ Сдано с опозданием</span>';
         } else {
             const od = kind === 'overdue';
             headBadge = od
-                ? '<span style="background:#ef4444;color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">🔴 Просрочено</span>'
+                ? '<span style="background:var(--c-danger);color:#fff;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">🔴 Просрочено</span>'
                 : `<span style="background:rgba(16,185,129,0.15);color:#059669;font-size:10px;font-weight:900;padding:3px 8px;border-radius:999px">🟢 Срок: ${_hwFmtDate(a.deadline)}</span>`;
             const restN = _hwAssignmentRemainingItems(a);
             const started = items.some(it => !window.hwItemDone(it) && (it.progress || 0) > 0) || items.some(it => window.hwItemDone(it));
             const label = od ? 'Доделать' : (started ? 'Продолжить' : 'Начать');
             btn = `<button onclick="window.startAssignment&&window.startAssignment('${a.id}')"
-                style="margin-top:10px;width:100%;background:${od ? '#ef4444' : '#3b82f6'};color:#fff;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:900;cursor:pointer">
+                style="margin-top:10px;width:100%;background:${od ? 'var(--c-danger)' : 'var(--c-brand)'};color:#fff;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:900;cursor:pointer">
                 ▶ ${label} · ${restN} ${restN === 1 ? 'этап' : 'этапа+'} </button>`;
         }
         const title = a.title || (items.length > 1 ? `Домашнее задание · ${items.length} этапов` : 'Домашнее задание');
@@ -805,6 +897,13 @@ window.startHwItem = function(id, idx) {
     const it = (a.items || [])[idx];
     if (!it) return;
     window.state.activeHw = { id, itemIndex: idx };
+    // Зубрёжка: запускаем тренажёр дат вместо обычного задания.
+    if (it.task === 'cram') {
+        const total = (a.items || []).length;
+        showToast('⚡', `Этап ${idx + 1} из ${total}: вызубрить ${it.goal} дат`, 'bg-indigo-500', 'border-indigo-700');
+        if (window.openCram) window.openCram();
+        return;
+    }
     const mm = HW_METRIC_META[it.metric] || HW_METRIC_META.lines;
     if ($('filter-period')) $('filter-period').value = it.period || 'all';
     if (it.period === 'custom') {
@@ -931,7 +1030,7 @@ window.openEGEModal = function() {
         { label:'База', val:'+20', pct:29, color:'#888' },
         { label:'Задание №4 (факты)', val:'+'+Math.round(r.s4), pct:Math.round((r.s4/20)*100), color:'#185FA5' },
         { label:'Задание №3 (процессы)', val:'+'+Math.round(r.s3), pct:Math.round((r.s3/17)*100), color:'#1D9E75' },
-        { label:'Задание №5 (даты)', val:'+'+Math.round(r.s5), pct:Math.round((r.s5/16)*100), color:'#8b5cf6' },
+        { label:'Задание №5 (даты)', val:'+'+Math.round(r.s5), pct:Math.round((r.s5/16)*100), color:'var(--c-purple)' },
         { label:'Задание №7 (культура)', val:'+'+Math.round(r.s7), pct:Math.round((r.s7/12)*100), color:'#d97706' },
         { label:'Штраф за эпохи', val:'−'+r.pen, pct:Math.round((r.pen/25)*100), color:'#E24B4A', neg:true },
         { label:'Точность'+(r.accuracy?` (${r.accuracy}%)`:''), val:(r.accAdj>=0?'+':'')+r.accAdj, pct:Math.round((Math.abs(r.accAdj)/15)*100), color: r.accAdj >= 0 ? '#1D9E75' : '#E24B4A', neg: r.accAdj < 0 },
@@ -963,7 +1062,7 @@ window.openEGEModal = function() {
           const mx5 = typeof task5Data !== 'undefined' ? task5Data.length : 250;
           const mx3 = typeof task3Data !== 'undefined' ? task3Data.length : 150;
           const mx7 = typeof window.task7Data !== 'undefined' ? window.task7Data.length : 180;
-          return [['📍 №4',r.d4,mx4,'#185FA5'],['👤 №5',r.d5,mx5,'#8b5cf6'],['🔗 №3',r.d3,mx3,'#1D9E75'],['🎨 №7',r.d7,mx7,'#d97706']].map(([lbl,cnt,mx,clr])=>`
+          return [['📍 №4',r.d4,mx4,'#185FA5'],['👤 №5',r.d5,mx5,'var(--c-purple)'],['🔗 №3',r.d3,mx3,'#1D9E75'],['🎨 №7',r.d7,mx7,'#d97706']].map(([lbl,cnt,mx,clr])=>`
           <div style="background:rgba(128,128,128,0.07);border-radius:8px;padding:8px 10px">
             <div style="font-size:11px;color:#888;margin-bottom:4px">${lbl}</div>
             <div style="font-size:16px;font-weight:700;color:${clr}">${cnt}<span style="font-size:10px;font-weight:400;color:#aaa"> / ${mx}</span></div>
@@ -1116,7 +1215,7 @@ window.closeGameOverModal = function() {
 function shareTelegram() { const text = `🔥 Мой стрик в тренажере ЕГЭ по истории — ${window.state.stats.streak}! Попробуй побить: `; window.open(`https://t.me/share/url?url=${encodeURIComponent(window.location.href)}&text=${encodeURIComponent(text)}`); }
 
 window.openStatsModal = function() {
-    updateGlobalUI(); if (window.loadStudentLeaderboard) window.loadStudentLeaderboard();
+    updateGlobalUI();
     if ($('stats-era-container')) {
         const tasks = [
             { key: 'task3', label: '🔗 Задание №3', color: 'text-emerald-600 dark:text-emerald-400' },
@@ -1135,7 +1234,7 @@ window.openStatsModal = function() {
                 if (!e.total) continue;
                 const pc = Math.round((e.correct / e.total) * 100);
                 const pcColor = pc > 80 ? 'text-emerald-500' : pc > 50 ? 'text-yellow-500' : 'text-rose-500';
-                const barColor = pc > 80 ? '#10b981' : pc > 50 ? '#f59e0b' : '#f43f5e';
+                const barColor = pc > 80 ? 'var(--c-success)' : pc > 50 ? 'var(--c-warn)' : 'var(--c-danger-soft)';
                 eH += `<div class="flex items-center gap-3 bg-gray-50 dark:bg-[#181818] p-2.5 rounded-xl border border-gray-100 dark:border-[#2c2c2c] mb-1.5">
                     <span class="text-[10px] font-black text-gray-500 dark:text-gray-400 min-w-[90px]">${eName}</span>
                     <div class="flex-1 h-1.5 bg-gray-200 dark:bg-[#2c2c2c] rounded-full overflow-hidden">

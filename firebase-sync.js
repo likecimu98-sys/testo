@@ -482,6 +482,22 @@
                 const hwIds = getAllKnownIds();
                 const canonicalId = resolveUserId(u);
                 if (!hwIds.includes(canonicalId)) hwIds.push(canonicalId);
+
+                // ── ДИАГНОСТИКА ВЫРАВНИВАНИЯ AUTH (см. AUTH.md) ──────────────────
+                // Включается флагом: localStorage.setItem('ege_auth_debug','1') + перезагрузка.
+                // Показывает, совпадает ли request.auth.uid с ID документа ученика —
+                // от этого зависит, можно ли включать строгие правила владения Firestore.
+                // Безопасно: только console.log за флагом, ничего не пишет и не меняет.
+                if (localStorage.getItem('ege_auth_debug')) {
+                    console.log('[AuthDiag]', JSON.stringify({
+                        authUid: u.uid,
+                        isAnonymous: u.isAnonymous,
+                        providers: (u.providerData || []).map(p => p.providerId),
+                        canonicalDocId: canonicalId,
+                        identitySource: (typeof getIdentitySource === 'function' ? getIdentitySource(canonicalId) : '?'),
+                        match_authUid_equals_docId: u.uid === canonicalId
+                    }));
+                }
                 
                 function _handleHwSnapshot(docSnap) {
                     if (!docSnap.exists()) return;
@@ -799,9 +815,9 @@
             // Поддержка обоих форматов: старый flat и новый per-task
             const isNewFormat = rawEra.task3 || rawEra.task4 || rawEra.task5 || rawEra.task7;
             const taskDefs = [
-                { key: 'task4', label: '📍 №4 География', color: '#3b82f6' },
-                { key: 'task5', label: '👤 №5 Личности',  color: '#8b5cf6' },
-                { key: 'task7', label: '🎨 №7 Культура',  color: '#f59e0b' },
+                { key: 'task4', label: '📍 №4 География', color: 'var(--c-brand)' },
+                { key: 'task5', label: '👤 №5 Личности',  color: 'var(--c-purple)' },
+                { key: 'task7', label: '🎨 №7 Культура',  color: 'var(--c-warn)' },
             ];
 
             // Общая точность (по всем заданиям и эпохам) для карточки
@@ -893,9 +909,21 @@
                 });
                 return learned;
             };
-            const itemRemaining = (it) => it.metric === 'learned'
-                ? Math.max(0, (it.goal || 0) - learnedCountFor(it.task, it.period))
-                : Math.max(0, (it.goal || 0) - (it.progress || 0));
+            // Зубрёжка: считаем выученные в тренажёре факты (ключи cram:* в factStreaks ученика).
+            const cramLearnedCount = () => {
+                let n = 0;
+                for (const k in hwStreaks) {
+                    if (k.indexOf('cram:') !== 0) continue;
+                    const v = hwStreaks[k];
+                    if (v && ((v.level || 0) > 0 || (v.points || 0) >= 3 || (v.streak || 0) >= 3)) n++;
+                }
+                return n;
+            };
+            const itemRemaining = (it) => it.task === 'cram'
+                ? Math.max(0, (it.goal || 0) - cramLearnedCount())
+                : (it.metric === 'learned'
+                    ? Math.max(0, (it.goal || 0) - learnedCountFor(it.task, it.period))
+                    : Math.max(0, (it.goal || 0) - (it.progress || 0)));
             assignments.forEach(a => {
                 const items = Array.isArray(a.items) ? a.items
                     : (a.task ? [{ task: a.task, period: 'all', metric: 'lines', goal: Number(a.total) || 0, progress: (Number(a.total) || 0) - (Number(a.remaining) || 0) }] : []);
@@ -951,7 +979,7 @@
             const days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
             return last7.map((d, i) => {
                 const h = Math.max(3, Math.round((d.val / max) * 28));
-                const color = d.val === 0 ? '#e5e7eb' : i === 6 ? '#3b82f6' : '#6ee7b7';
+                const color = d.val === 0 ? '#e5e7eb' : i === 6 ? 'var(--c-brand)' : '#6ee7b7';
                 const dayIdx = (new Date(d.date).getDay() + 6) % 7;
                 return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">
                     <div title="${d.date}: ${d.val} строк" style="width:100%;max-width:14px;height:${h}px;background:${color};border-radius:3px 3px 0 0"></div>
@@ -963,7 +991,7 @@
         function renderEraRows(eraData) {
             return Object.values(eraData).map(e => {
                 if (!e.total) return '';
-                const c = e.pct >= 80 ? '#10b981' : e.pct >= 60 ? '#f59e0b' : '#f43f5e';
+                const c = e.pct >= 80 ? 'var(--c-success)' : e.pct >= 60 ? 'var(--c-warn)' : 'var(--c-danger-soft)';
                 return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
                     <span style="font-size:9px;color:#6b7280;font-weight:700;min-width:68px">${e.name}</span>
                     <div style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden">
@@ -980,10 +1008,10 @@
                 const dayIdx = (new Date(d.date).getDay() + 6) % 7;
                 const dateStr = new Date(d.date).toLocaleDateString('ru-RU', {day:'2-digit', month:'2-digit'});
                 const parts = [];
-                if (d.t4) parts.push(`<span style="color:#3b82f6">📍${d.t4}</span>`);
-                if (d.t5) parts.push(`<span style="color:#8b5cf6">👤${d.t5}</span>`);
-                if (d.t7) parts.push(`<span style="color:#f59e0b">🎨${d.t7}</span>`);
-                const taskStr = parts.length ? parts.join(' ') : `<span style="color:#3b82f6">${d.val}</span>`;
+                if (d.t4) parts.push(`<span style="color:var(--c-brand)">📍${d.t4}</span>`);
+                if (d.t5) parts.push(`<span style="color:var(--c-purple)">👤${d.t5}</span>`);
+                if (d.t7) parts.push(`<span style="color:var(--c-warn)">🎨${d.t7}</span>`);
+                const taskStr = parts.length ? parts.join(' ') : `<span style="color:var(--c-brand)">${d.val}</span>`;
                 return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;padding:3px 0;border-bottom:1px solid #f8fafc">
                     <span style="font-weight:700;color:#94a3b8;min-width:30px">${dateStr}</span>
                     <span style="font-weight:700">${taskStr}</span>
@@ -998,9 +1026,9 @@
             const medal    = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `<span style="color:#9ca3af;font-size:12px">#${idx+1}</span>`;
             const timeStr  = s.timeSpentMin >= 60 ? `${Math.floor(s.timeSpentMin/60)}ч ${s.timeSpentMin%60}м` : `${s.timeSpentMin}м`;
             const accStr   = s.accuracy !== null ? `${s.accuracy}%` : '—';
-            const accColor = s.accuracy === null ? '#9ca3af' : s.accuracy >= 80 ? '#10b981' : s.accuracy >= 60 ? '#f59e0b' : '#f43f5e';
+            const accColor = s.accuracy === null ? '#9ca3af' : s.accuracy >= 80 ? 'var(--c-success)' : s.accuracy >= 60 ? 'var(--c-warn)' : 'var(--c-danger-soft)';
             const atRiskBadge = s.atRisk
-                ? `<span style="font-size:9px;font-weight:700;background:#fef2f2;color:#ef4444;border:1px solid #fecaca;padding:2px 6px;border-radius:4px">⚠️ ${s.daysSinceActive}д без входа</span>` : '';
+                ? `<span style="font-size:9px;font-weight:700;background:#fef2f2;color:var(--c-danger);border:1px solid #fecaca;padding:2px 6px;border-radius:4px">⚠️ ${s.daysSinceActive}д без входа</span>` : '';
             const todayBadge = s.isToday
                 ? `<span style="font-size:9px;font-weight:700;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;padding:2px 6px;border-radius:4px">🟢 онлайн сегодня</span>` : '';
             const hwDeadlineStr = s.hwDeadline ? ' · до ' + new Date(s.hwDeadline + 'T00:00:00').toLocaleDateString('ru-RU', {day:'numeric',month:'short'}) : '';
@@ -1011,11 +1039,11 @@
                 ? `<span style="font-size:9px;font-weight:700;background:#eff6ff;color:#0369a1;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px">⏱ вовремя ${s.hwOnTimeTotal||0}${(s.hwLateTotal||0)?` · опозд. ${s.hwLateTotal}`:''}${(s.hwStreakMax||0)>=3?` · 🔥${s.hwStreakMax}`:''}</span>`
                 : '';
             const weakBlock = s.weakEra
-                ? `<div style="margin-top:6px;font-size:10px;color:#9ca3af;font-weight:700">📍 Слабая тема: <span style="color:#f43f5e">${s.weakEra.name} — ${s.weakEra.pct}%</span></div>` : '';
+                ? `<div style="margin-top:6px;font-size:10px;color:#9ca3af;font-weight:700">📍 Слабая тема: <span style="color:var(--c-danger-soft)">${s.weakEra.name} — ${s.weakEra.pct}%</span></div>` : '';
             const _sbt = s.solvedByTask || {}, _mbt = s.mistakesByTask || {};
             const _tm = [['task3','🔗'],['task4','📍'],['task5','👤'],['task7','🎨']];
-            const solvedRow = _tm.map(([t,e]) => `<span>${e}<b style="color:#3b82f6;margin-left:2px">${_sbt[t]||0}</b></span>`).join('');
-            const mistRow = _tm.map(([t,e]) => `<span>${e}<b style="color:${(_mbt[t]||0)>0?'#ef4444':'#94a3b8'};margin-left:2px">${_mbt[t]||0}</b></span>`).join('');
+            const solvedRow = _tm.map(([t,e]) => `<span>${e}<b style="color:var(--c-brand);margin-left:2px">${_sbt[t]||0}</b></span>`).join('');
+            const mistRow = _tm.map(([t,e]) => `<span>${e}<b style="color:${(_mbt[t]||0)>0?'var(--c-danger)':'#94a3b8'};margin-left:2px">${_mbt[t]||0}</b></span>`).join('');
 
             return `<div class="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-[#2c2c2c] flex flex-col">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:1px solid #f1f5f9;gap:8px">
@@ -1025,7 +1053,7 @@
                             <div class="dark:text-gray-200" style="font-weight:900;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name || 'Без имени'}</div>
                             <div style="font-size:9px;color:#94a3b8;margin-top:1px;display:flex;gap:6px;flex-wrap:wrap">
                                 <span style="font-family:monospace;color:#64748b">🆔 ${s.tgId || s.knownTgId || s.canonicalId || s.uid || '—'}</span>
-                                ${s.classCode ? `<span style="color:#3b82f6;font-weight:700">класс ${s.classCode}</span>` : ''}
+                                ${s.classCode ? `<span style="color:var(--c-brand);font-weight:700">класс ${s.classCode}</span>` : ''}
                             </div>
                             <div style="font-size:9px;color:#94a3b8;margin-top:1px">${s.lastActiveStr}</div>
                         </div>
@@ -1033,10 +1061,10 @@
                     <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0">${hwBadge}${hwTimingBadge}${atRiskBadge}${todayBadge}</div>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px 0;border-bottom:1px solid #f1f5f9;text-align:center">
-                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Решено</div><div style="font-size:13px;font-weight:900;color:#3b82f6">${s.totalSolved||0}</div></div>
-                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">⭐ Баллы</div><div style="font-size:13px;font-weight:900;color:#f59e0b">${s.egePoints||0}</div></div>
-                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Выучено</div><div style="font-size:13px;font-weight:900;color:#10b981">${s.learnedCount}</div></div>
-                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Стрик</div><div style="font-size:13px;font-weight:900;color:#f59e0b">${s.streak}🔥</div></div>
+                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Решено</div><div style="font-size:13px;font-weight:900;color:var(--c-brand)">${s.totalSolved||0}</div></div>
+                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">⭐ Баллы</div><div style="font-size:13px;font-weight:900;color:var(--c-warn)">${s.egePoints||0}</div></div>
+                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Выучено</div><div style="font-size:13px;font-weight:900;color:var(--c-success)">${s.learnedCount}</div></div>
+                    <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Стрик</div><div style="font-size:13px;font-weight:900;color:var(--c-warn)">${s.streak}🔥</div></div>
                     <div><div style="font-size:8px;color:#94a3b8;font-weight:700;text-transform:uppercase">Точность</div><div style="font-size:13px;font-weight:900;color:${accColor}">${accStr}</div></div>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 0;border-bottom:1px solid #f1f5f9">
@@ -1067,7 +1095,7 @@
                 <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 4px;font-size:9px;color:#94a3b8;font-weight:700">
                     <span>⏱ В игре: <b style="color:#a78bfa">${timeStr}</b></span>
                     <span>📝 Попыток: <b style="color:#64748b">${s.totalAttempts||0}</b></span>
-                    <span>✅ Верных: <b style="color:#10b981">${s.totalCorrect||0}</b></span>
+                    <span>✅ Верных: <b style="color:var(--c-success)">${s.totalCorrect||0}</b></span>
                 </div>
                 <div style="display:flex;gap:6px;padding-top:8px;border-top:1px solid #f1f5f9">
                     <button onclick="window.promptAssignHw('${safeUid}','${safeName}')" class="flex-1 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-400 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors active:scale-95">📝 ДЗ</button>
@@ -1114,16 +1142,16 @@
             const esc = t => String(t||'').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 
             const solvedHtml = ['task3','task4','task5','task7'].map(t =>
-                `<div style="text-align:center"><div style="font-size:15px">${em[t]}</div><div style="font-size:13px;font-weight:900;color:#3b82f6">${solved[t]}</div><div style="font-size:8px;color:${mistByTask[t]>0?'#ef4444':'#94a3b8'}">−${mistByTask[t]}</div></div>`).join('');
+                `<div style="text-align:center"><div style="font-size:15px">${em[t]}</div><div style="font-size:13px;font-weight:900;color:var(--c-brand)">${solved[t]}</div><div style="font-size:8px;color:${mistByTask[t]>0?'var(--c-danger)':'#94a3b8'}">−${mistByTask[t]}</div></div>`).join('');
 
             const eraHtml = ['early','18th','19th','20th'].filter(k=>eraAgg[k]).map(k => {
-                const e = eraAgg[k], pc = Math.round(e.c/e.t*100), col = pc>=80?'#10b981':pc>=60?'#f59e0b':'#f43f5e';
+                const e = eraAgg[k], pc = Math.round(e.c/e.t*100), col = pc>=80?'var(--c-success)':pc>=60?'var(--c-warn)':'var(--c-danger-soft)';
                 return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;margin-bottom:3px"><span style="min-width:72px;color:#64748b;font-weight:700">${esc(e.name)}</span><div style="flex:1;height:5px;background:#f1f5f9;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${col}"></div></div><span style="min-width:34px;text-align:right;font-weight:700;color:${col}">${pc}%</span></div>`;
             }).join('');
 
             const mistHtml = topMistakes.length ? topMistakes.map((m,i) =>
-                `<div style="display:flex;align-items:center;gap:6px;font-size:10px;padding:2px 0"><span style="color:#cbd5e1;min-width:14px">${i+1}.</span><span>${em[m.task]||''}</span><span style="flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300" title="${esc(m.label)}">${esc(m.label)}</span><span style="font-weight:900;color:#ef4444;min-width:54px;text-align:right">${m.count} уч.</span></div>`).join('')
-                : '<p style="font-size:10px;color:#10b981;font-weight:700;padding:4px 0">Активных ошибок нет 🎉</p>';
+                `<div style="display:flex;align-items:center;gap:6px;font-size:10px;padding:2px 0"><span style="color:#cbd5e1;min-width:14px">${i+1}.</span><span>${em[m.task]||''}</span><span style="flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300" title="${esc(m.label)}">${esc(m.label)}</span><span style="font-weight:900;color:var(--c-danger);min-width:54px;text-align:right">${m.count} уч.</span></div>`).join('')
+                : '<p style="font-size:10px;color:var(--c-success);font-weight:700;padding:4px 0">Активных ошибок нет 🎉</p>';
 
             // ── Прогресс выучивания: сколько фактов из общего пула выучил каждый ученик ──
             let totalPool = 0;
@@ -1141,7 +1169,7 @@
                                       .sort((a,b) => b.learned - a.learned);
             const avgLearned = learnRows.length ? Math.round(learnRows.reduce((x,r)=>x+r.learned,0)/learnRows.length) : 0;
             const avgPct = totalPool ? Math.round(avgLearned/totalPool*100) : 0;
-            const learnColor = pc => pc>=66?'#10b981':pc>=33?'#f59e0b':'#f43f5e';
+            const learnColor = pc => pc>=66?'var(--c-success)':pc>=33?'var(--c-warn)':'var(--c-danger-soft)';
             const learnHtml = (totalPool && learnRows.length) ? learnRows.map(r => {
                 const pc = Math.round(r.learned/totalPool*100), col = learnColor(pc);
                 return `<div style="display:flex;align-items:center;gap:6px;font-size:10px;margin-bottom:3px"><span style="min-width:84px;color:#334155;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300" title="${esc(r.name)}">${esc(r.name)}</span><div style="flex:1;height:6px;background:#f1f5f9;border-radius:3px;overflow:hidden"><div style="height:100%;width:${pc}%;background:${col}"></div></div><span style="min-width:70px;text-align:right;font-weight:700;color:${col}">${r.learned}<span style="color:#cbd5e1;font-weight:400">/${totalPool}</span> · ${pc}%</span></div>`;
@@ -1150,8 +1178,8 @@
             cont.innerHTML = `
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:2px 0 4px">Решено по заданиям (− активные ошибки)</div>
               <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">${solvedHtml}</div>
-              ${(classAcc!==null || hwAssigned) ? `<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px">${classAcc!==null?`Средняя точность класса: <b style="color:${classAcc>=80?'#10b981':classAcc>=60?'#f59e0b':'#f43f5e'}">${classAcc}%</b>`:''}${hwAssigned?`${classAcc!==null?' · ':''}ДЗ сдали: <b style="color:#16a34a">${hwDone}/${hwAssigned}</b>`:''}</div>`:''}
-              ${hwTimingTotal ? `<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px">⏱ Сдают вовремя: <b style="color:${hwOnTimePct>=80?'#10b981':hwOnTimePct>=50?'#f59e0b':'#f43f5e'}">${hwOnTimePct}%</b> <span style="color:#94a3b8;font-weight:400">(вовремя ${hwOnTimeSum} · с опозданием ${hwLateSum})</span></div>`:''}
+              ${(classAcc!==null || hwAssigned) ? `<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px">${classAcc!==null?`Средняя точность класса: <b style="color:${classAcc>=80?'var(--c-success)':classAcc>=60?'var(--c-warn)':'var(--c-danger-soft)'}">${classAcc}%</b>`:''}${hwAssigned?`${classAcc!==null?' · ':''}ДЗ сдали: <b style="color:#16a34a">${hwDone}/${hwAssigned}</b>`:''}</div>`:''}
+              ${hwTimingTotal ? `<div style="font-size:10px;color:#64748b;font-weight:700;margin-bottom:6px">⏱ Сдают вовремя: <b style="color:${hwOnTimePct>=80?'var(--c-success)':hwOnTimePct>=50?'var(--c-warn)':'var(--c-danger-soft)'}">${hwOnTimePct}%</b> <span style="color:#94a3b8;font-weight:400">(вовремя ${hwOnTimeSum} · с опозданием ${hwLateSum})</span></div>`:''}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:8px 0 4px">Точность класса по эпохам</div>
               ${eraHtml || '<p style="font-size:10px;color:#94a3b8">Нет данных</p>'}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:10px 0 4px">📚 Выучено фактов${totalPool?` · в среднем ${avgLearned}/${totalPool} (${avgPct}%)`:''}</div>
@@ -1160,8 +1188,8 @@
               ${mistHtml}
               <div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin:10px 0 4px">📋 Не сдали ДЗ${debtors.length?` (${debtors.length})`:''}</div>
               ${debtors.length ? debtors.map(d =>
-                `<div style="display:flex;align-items:center;gap:6px;font-size:10px;padding:2px 0"><span>${d.overdue?'🔴':'🟠'}</span><span style="flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300">${esc(d.name)}</span><span style="font-weight:700;color:${d.overdue?'#ef4444':'#ea580c'};min-width:120px;text-align:right">${d.remaining} стр.${d.overdue?' · просрочено':(d.deadline?' · до '+new Date(d.deadline+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):'')}</span></div>`
-              ).join('') : '<p style="font-size:10px;color:#10b981;font-weight:700;padding:4px 0">Все сдали ДЗ ✅</p>'}`;
+                `<div style="display:flex;align-items:center;gap:6px;font-size:10px;padding:2px 0"><span>${d.overdue?'🔴':'🟠'}</span><span style="flex:1;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="dark:text-gray-300">${esc(d.name)}</span><span style="font-weight:700;color:${d.overdue?'var(--c-danger)':'#ea580c'};min-width:120px;text-align:right">${d.remaining} стр.${d.overdue?' · просрочено':(d.deadline?' · до '+new Date(d.deadline+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'}):'')}</span></div>`
+              ).join('') : '<p style="font-size:10px;color:var(--c-success);font-weight:700;padding:4px 0">Все сдали ДЗ ✅</p>'}`;
         }
         window.renderClassAnalytics = renderClassAnalytics;
 
@@ -1273,7 +1301,7 @@
 
             const timeStr = s.timeSpentMin >= 60 ? `${Math.floor(s.timeSpentMin/60)}ч ${s.timeSpentMin%60}м` : `${s.timeSpentMin}м`;
             const accStr = s.accuracy !== null ? `${s.accuracy}%` : '—';
-            const accColor = s.accuracy === null ? '#9ca3af' : s.accuracy >= 80 ? '#10b981' : s.accuracy >= 60 ? '#f59e0b' : '#f43f5e';
+            const accColor = s.accuracy === null ? '#9ca3af' : s.accuracy >= 80 ? 'var(--c-success)' : s.accuracy >= 60 ? 'var(--c-warn)' : 'var(--c-danger-soft)';
 
             // ─── Ленивая загрузка jsPDF — не грузим при старте, только по запросу ──
             if (typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined') {
@@ -1364,7 +1392,7 @@
                 { l: 'Выучено',   v: s.learnedCount||0,   c: [16,185,129] },
                 { l: 'Стрик',     v: (s.streak||0)+'',    c: [245,158,11] },
                 { l: 'За неделю', v: s.wScore||0,          c: [139,92,246] },
-                { l: 'Точность',  v: accStr,               c: accColor === '#9ca3af' ? [148,163,184] : accColor === '#10b981' ? [16,185,129] : accColor === '#f59e0b' ? [245,158,11] : [244,63,94] },
+                { l: 'Точность',  v: accStr,               c: accColor === '#9ca3af' ? [148,163,184] : accColor === 'var(--c-success)' ? [16,185,129] : accColor === 'var(--c-warn)' ? [245,158,11] : [244,63,94] },
                 { l: 'Время',     v: timeStr,              c: [167,139,250] },
             ];
             const cellW = CW / 3, cellH = 13;
@@ -1523,12 +1551,15 @@
                 const studentsCol = collection(db, 'artifacts', appId, 'public', 'data', 'students');
                 const filterClass = document.getElementById('teacher-filter-class')?.checked;
                 
-                // ✅ FIX: Точечный запрос с фильтром по классу или limit(200) для "всех"
+                // Грузим всех, кто нарешал хотя бы 10 строк (totalSolved >= 10), без жёсткого лимита 200.
+                // Серверный фильтр заодно отсекает «мёртвые» аккаунты с нулевой активностью и режет стоимость чтений.
+                // Запас limit(3000) — страховка от неконтролируемого чтения на больших объёмах.
+                const MIN_SOLVED = 10;
                 let firestoreQuery;
                 if (filterClass && tc) {
-                    firestoreQuery = query(studentsCol, where('classCode', '==', tc), orderBy('totalSolved', 'desc'), limit(200));
+                    firestoreQuery = query(studentsCol, where('classCode', '==', tc), where('totalSolved', '>=', MIN_SOLVED), orderBy('totalSolved', 'desc'), limit(3000));
                 } else {
-                    firestoreQuery = query(studentsCol, orderBy('totalSolved', 'desc'), limit(200));
+                    firestoreQuery = query(studentsCol, where('totalSolved', '>=', MIN_SOLVED), orderBy('totalSolved', 'desc'), limit(3000));
                 }
                 
                 const qS = await getDocs(firestoreQuery);
@@ -2381,10 +2412,10 @@
                 });
 
                 const dupeGroups = groups.filter(g => g.size > 1);
-                if (logEl) logEl.innerHTML += `<div style="color:#f59e0b;font-size:11px;margin-top:4px">🔍 Найдено ${dupeGroups.length} групп дублей</div>`;
+                if (logEl) logEl.innerHTML += `<div style="color:var(--c-warn);font-size:11px;margin-top:4px">🔍 Найдено ${dupeGroups.length} групп дублей</div>`;
 
                 if (!dupeGroups.length) {
-                    if (logEl) logEl.innerHTML += '<div style="color:#10b981;font-size:11px;margin-top:4px">✅ Дублей не найдено!</div>';
+                    if (logEl) logEl.innerHTML += '<div style="color:var(--c-success);font-size:11px;margin-top:4px">✅ Дублей не найдено!</div>';
                     if (btn) btn.disabled = false;
                     return;
                 }
@@ -2438,20 +2469,20 @@
                             }, { merge: true });
                         }
 
-                        if (logEl) logEl.innerHTML += `<div style="color:#10b981;font-size:11px;margin-top:2px">✅ ${names} → <b>${canonical.id.slice(0,16)}…</b></div>`;
+                        if (logEl) logEl.innerHTML += `<div style="color:var(--c-success);font-size:11px;margin-top:2px">✅ ${names} → <b>${canonical.id.slice(0,16)}…</b></div>`;
                         merged++;
                     } catch(e) {
-                        if (logEl) logEl.innerHTML += `<div style="color:#ef4444;font-size:11px;margin-top:2px">❌ ${names}: ${e.message}</div>`;
+                        if (logEl) logEl.innerHTML += `<div style="color:var(--c-danger);font-size:11px;margin-top:2px">❌ ${names}: ${e.message}</div>`;
                         skipped++;
                     }
                 }
 
-                if (logEl) logEl.innerHTML += `<div style="color:#3b82f6;font-size:11px;font-weight:700;margin-top:6px;border-top:1px solid #e5e7eb;padding-top:6px">🎉 Объединено: ${merged} групп · Пропущено: ${skipped}</div>`;
+                if (logEl) logEl.innerHTML += `<div style="color:var(--c-brand);font-size:11px;font-weight:700;margin-top:6px;border-top:1px solid #e5e7eb;padding-top:6px">🎉 Объединено: ${merged} групп · Пропущено: ${skipped}</div>`;
                 showToast('🔀', `Объединено ${merged} дублей`, 'bg-emerald-500', 'border-emerald-700');
                 if (window.loadClassProgress) window.loadClassProgress();
             } catch(e) {
                 console.error('[Dedup] error:', e);
-                if (logEl) logEl.innerHTML += `<div style="color:#ef4444;font-size:11px">❌ Ошибка: ${e.message}</div>`;
+                if (logEl) logEl.innerHTML += `<div style="color:var(--c-danger);font-size:11px">❌ Ошибка: ${e.message}</div>`;
             }
             if (btn) btn.disabled = false;
         };
@@ -2469,7 +2500,7 @@
                 showToast('🔀', `Выбран: ${name}. Теперь выбери второй аккаунт`, 'bg-blue-500', 'border-blue-700');
                 // Подсветить карточку
                 document.querySelectorAll('[data-student-uid]').forEach(el => {
-                    el.style.outline = el.dataset.studentUid === uid ? '3px solid #3b82f6' : '';
+                    el.style.outline = el.dataset.studentUid === uid ? '3px solid var(--c-brand)' : '';
                 });
             } else if (window._mergeSelectionA.uid === uid) {
                 // Отмена выбора
@@ -2498,7 +2529,7 @@
                       <div style="font-size:9px;color:#9ca3af;margin-top:1px;word-break:break-all">${A.uid}</div>
                     </div>
                     <div style="text-align:center;font-size:18px">+</div>
-                    <div style="background:#fef9c3;border:1px solid #fde047;border-radius:10px;padding:10px 12px">
+                    <div style="background:#fef9c3;border:1px solid var(--c-accent);border-radius:10px;padding:10px 12px">
                       <div style="font-size:9px;color:#6b7280;font-weight:700;text-transform:uppercase;margin-bottom:2px">Аккаунт B (поглощается)</div>
                       <div style="font-size:13px;font-weight:900;color:#854d0e">${B.name}</div>
                       <div style="font-size:9px;color:#9ca3af;margin-top:1px;word-break:break-all">${B.uid}</div>
@@ -2511,7 +2542,7 @@
                     <button onclick="document.getElementById('${overlayId}').remove()" 
                       style="flex:1;background:#f3f4f6;color:#374151;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer">Отмена</button>
                     <button onclick="window._doManualMerge('${A.uid}','${B.uid}');document.getElementById('${overlayId}').remove()"
-                      style="flex:1;background:#3b82f6;color:#fff;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer">✅ Объединить</button>
+                      style="flex:1;background:var(--c-brand);color:#fff;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer">✅ Объединить</button>
                   </div>
                 </div>`;
             }
@@ -2588,7 +2619,7 @@
             const pin = await window.getOrCreateSyncPin();
             if (btn) { btn.disabled = false; btn.textContent = '📋 Мой PIN'; }
             if (!pin) {
-                if (display) { display.textContent = '— ошибка —'; display.style.color = '#ef4444'; }
+                if (display) { display.textContent = '— ошибка —'; display.style.color = 'var(--c-danger)'; }
                 return;
             }
             if (display) {
@@ -2597,7 +2628,7 @@
                 display.style.letterSpacing = '3px';
                 display.style.fontSize = '20px';
                 display.style.fontWeight = '900';
-                display.style.color = '#3b82f6';
+                display.style.color = 'var(--c-brand)';
             }
             try {
                 await navigator.clipboard.writeText(pin);

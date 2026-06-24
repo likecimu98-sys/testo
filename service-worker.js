@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = '2026-06-22-4';
+const APP_VERSION = '2026-06-24-5';
 const STATIC_CACHE = `ege-history-static-${APP_VERSION}`;
 const ASSET_CACHE = `ege-history-assets-${APP_VERSION}`;
 const CACHE_NAMES = [STATIC_CACHE, ASSET_CACHE];
@@ -8,6 +8,7 @@ const CACHE_NAMES = [STATIC_CACHE, ASSET_CACHE];
 const CORE_URLS = [
     './',
     './index.html',
+    './cram.html',
     './manifest.webmanifest',
     './pwa.js',
     './config.js',
@@ -24,6 +25,7 @@ const CORE_URLS = [
     './mapLegendData.generated.js',
     './visualStudyData.generated.js',
     './data.js',
+    './tokens.css',
     './output.css',
     './theme-aurora.css',
     './styles.css',
@@ -117,13 +119,18 @@ async function cleanupOldCaches() {
 
 async function networkFirstNavigation(request) {
     const cache = await caches.open(STATIC_CACHE);
+    // cram.html и другие под-страницы (iframe) кэшируем под их собственным URL,
+    // а не под index.html — иначе навигация iframe затирала бы кэш главной страницы.
+    const url = new URL(request.url);
+    const isRootNav = url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+    const cacheKey = isRootNav ? scopedRequest('./index.html') : request;
 
     try {
         const response = await fetch(request);
-        await putIfOk(cache, scopedRequest('./index.html'), response);
+        await putIfOk(cache, cacheKey, response);
         return response;
     } catch (error) {
-        return (await cache.match(request)) ||
+        return (await cache.match(request, { ignoreSearch: true })) ||
             (await cache.match(scopedRequest('./index.html'))) ||
             Response.error();
     }

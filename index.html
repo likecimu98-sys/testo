@@ -19,6 +19,7 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="assets/icons/icon-180.png">
+    <link rel="stylesheet" href="tokens.css">
     <link rel="stylesheet" href="output.css">
     <link rel="stylesheet" href="theme-aurora.css">
     <link rel="stylesheet" href="styles.css">
@@ -26,104 +27,15 @@
     <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
 
     <style>
-        /* Принудительно отключаем влияние системной тёмной темы браузера/телефона.
-           Тёмный режим в приложении управляется ТОЛЬКО классом .dark на <html>. */
-        html { color-scheme: only light; }
-        .dark { color-scheme: only dark; }
-        html, body { overscroll-behavior-y: none; transition: background-color 0.4s, color 0.4s; }
-        body:not(.in-game) { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
-        body.in-game { padding-bottom: env(safe-area-inset-bottom, 0px); }
-        #bottom-nav { height: calc(70px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); }
-        #bottom-nav.hide-nav { display: none !important; }
-        @media (min-width: 1024px) { #pool-panel { position: sticky !important; top: 4rem !important; height: fit-content !important; align-self: flex-start !important; bottom: auto !important; } }
-        
-        .custom-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .dark .custom-scroll::-webkit-scrollbar-thumb { background: #475569; }
+        /* Этот inline-блок намеренно МИНИМАЛЕН: только то, что должно сработать на
+           первом кадре, до загрузки внешних CSS — глобальный запрет выделения текста
+           и экран-заставка загрузки. Стили слотов/фишек/режимов/скинов больше тут НЕ
+           дублируются: единственный источник — styles.css (правьте графику там). */
 
-        .dark body { background-color: #121212; color: #d1d5db; }
-
-        .dnd-slot { min-height: 40px; border: 2px dashed #94a3b8; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; background-color: #f8fafc; cursor: pointer; transition: all 0.2s ease; box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05); padding: 0.15rem; touch-action: manipulation; font-size: 11px; line-height: 1.1; text-align: center; will-change: background-color, border-color; }
-        .dnd-slot:empty::before { content: attr(data-letter); color: #64748b; font-size: 1.5rem; font-weight: 900; opacity: 0.5; }
-        .dark .dnd-slot { border-color: #3f3f46; background-color: #18181b; }
-        .dark .dnd-slot:empty::before { color: #71717a; opacity: 0.5; }
-        @media (min-width: 768px) { .dnd-slot { min-height: 52px; font-size: 14px;} }
-        
-        .dnd-slot:hover { border-color: #64748b; background-color: #f1f5f9; }
-        .dark .dnd-slot:hover { border-color: #52525b; background-color: #27272a; }
-        .dnd-slot.has-item { border: 2px solid #3b82f6; background-color: white; box-shadow: none; padding: 0; }
-        .dark .dnd-slot.has-item { border-color: #3b82f6; background-color: #18181b; }
-        .dnd-slot.correct-slot { border-color: #10b981; background-color: #ecfdf5; pointer-events: none; }
-        .dark .dnd-slot.correct-slot { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
-        .dnd-slot.incorrect-slot { border-color: #f43f5e; background-color: #fff1f2; animation: shake 0.4s ease-in-out; }
-        .dark .dnd-slot.incorrect-slot { border-color: #f43f5e; background-color: rgba(244, 63, 94, 0.1); }
-        .dnd-slot.revealed-slot { border-color: #f59e0b; background-color: #fffbeb; pointer-events: none; }
-        .dark .dnd-slot.revealed-slot { border-color: #ea580c; background-color: rgba(234, 88, 12, 0.05); }
-
-        .slot-ready { border-color: #3b82f6 !important; background-color: #eff6ff !important; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important; transform: scale(1.01); }
-
-        .dnd-chip { padding: 0.35rem 0.5rem; background-color: white; border: 2px solid #cbd5e1; border-radius: 0.75rem; font-weight: 700; font-size: 0.75rem; cursor: pointer; box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05); transition: transform 0.1s ease, background-color 0.1s, border-color 0.1s; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; color: #1e293b; text-align: center; touch-action: manipulation; will-change: transform, opacity; }
-        .dark .dnd-chip { background-color: #27272a; border-color: #3f3f46; color: #e4e4e7; }
-        @media (min-width: 768px) { .dnd-chip { font-size: 0.9rem; padding: 0.4rem 0.6rem; } }
-        
-        .dnd-chip.selected { border-color: #3b82f6; background-color: #eff6ff; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3); transform: translateY(-2px); }
-        .dark .dnd-chip.selected { border-color: #3b82f6; background-color: rgba(59, 130, 246, 0.15); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
-        .dnd-chip.in-slot { border: none; box-shadow: none; background: transparent; padding: 0.15rem; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 11px; transform: none; border-radius: 0; line-height: 1.1;}
-        @media (min-width: 768px) { .dnd-chip.in-slot { font-size: 0.9rem; } }
-        
-        .task7-chip.in-slot { justify-content: flex-start !important; text-align: left !important; padding: 0.25rem 0.4rem !important; }
-
-        .revealed-chip { background-color: #fff7ed !important; border-color: #fdba74 !important; color: #c2410c !important; }
-        .dark .revealed-chip { background-color: rgba(194, 65, 12, 0.2) !important; border-color: #ea580c !important; color: #fdba74 !important; }
-
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
-
-        body.mode-detective #table-container { background-color: #f3efe6 !important; border: none !important; font-family: 'Georgia', serif !important; box-shadow: 0 10px 30px rgba(0,0,0,0.15) !important; border-radius: 8px !important; }
-        .dark body.mode-detective #table-container { background-color: #c7c1b3 !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; }
-        body.mode-detective #table-container, .dark body.mode-detective #table-container { color: #2c241b !important; }
-        body.mode-detective #classic-task-area tr { border-color: transparent !important; }
-        body.mode-detective #classic-task-area td { border: none !important; border-bottom: 1px dashed #d1c1a5 !important; }
-        
-        body.mode-detective .detective-slot { background-color: rgba(239, 68, 68, 0.08) !important; border: 2px dashed #ef4444 !important; color: transparent !important; position: relative; overflow: hidden; border-radius: 4px !important; box-shadow: none !important; display: inline-flex !important; min-width: 180px; height: 28px; vertical-align: middle; margin: 0 6px; }
-        body.mode-detective .detective-slot::after { content: 'ДАННЫЕ ЗАСЕКРЕЧЕНЫ'; position: absolute; color: #ef4444; font-family: 'Arial', sans-serif; font-size: 10px; font-weight: 900; letter-spacing: 0.5px; pointer-events: none; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; text-align: center; }
-        
-        body.mode-detective .detective-slot.has-item { background-color: white !important; min-width: auto; border: 2px solid #3b82f6 !important; border-radius: 0.75rem !important; height: auto; display: inline-flex !important; padding: 0 !important; box-shadow: none !important; }
-        .dark body.mode-detective .detective-slot.has-item { background-color: #18181b !important; border-color: #3b82f6 !important; }
-        body.mode-detective .detective-slot.has-item::after { display: none; }
-        
-        body.mode-detective .detective-slot.correct-slot { border-color: #10b981 !important; background-color: #ecfdf5 !important; }
-        .dark body.mode-detective .detective-slot.correct-slot { background-color: rgba(16, 185, 129, 0.1) !important; }
-        body.mode-detective .detective-slot.incorrect-slot { border-color: #f43f5e !important; background-color: #fff1f2 !important; }
-        .dark body.mode-detective .detective-slot.incorrect-slot { background-color: rgba(244, 63, 94, 0.1) !important; }
-        body.mode-detective .detective-slot.revealed-slot { border-color: #f59e0b !important; background-color: #fffbeb !important; }
-        .dark body.mode-detective .detective-slot.revealed-slot { border-color: #ea580c !important; background-color: rgba(234, 88, 12, 0.05) !important; }
-
-        /* Детектив: мобильный лейаут — пул улик снизу экрана */
-        @media (max-width: 1023px) {
-            body.mode-detective #pool-panel { position: fixed !important; bottom: 0 !important; left: 0 !important; right: 0 !important; z-index: 50 !important; border-radius: 1rem 1rem 0 0 !important; max-height: 45vh !important; overflow-y: auto !important; box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important; border-top: 2px solid #d1c1a5 !important; padding-bottom: env(safe-area-inset-bottom, 0px) !important; }
-            .dark body.mode-detective #pool-panel { box-shadow: 0 -4px 20px rgba(0,0,0,0.5) !important; border-top-color: #3f3f46 !important; }
-            body.mode-detective #table-container { margin-bottom: 160px !important; border-radius: 0.75rem !important; border: 1px solid #d1c1a5 !important; }
-            body.mode-detective #classic-task-area { padding-bottom: 0 !important; }
-        }
-
-        .paper-bg { background-color: #f4ecd8; color: #2c241b; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.15); background-image: radial-gradient(#d1c1a5 1px, transparent 1px); background-size: 20px 20px; background-position: 0 0; font-family: 'Georgia', serif; }
-        .dark .paper-bg { background-color: #2a2621; color: #e5e0d8; background-image: radial-gradient(#3d362d 1px, transparent 1px); }
-        .paper-edges { position: absolute; inset: 0; box-shadow: inset 0 0 60px rgba(100, 70, 40, 0.15); pointer-events: none; }
-        .dark .paper-edges { box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5); }
-        #rp-content { user-select: none; }
-        .word-node, .plain-word { display: inline-block; position: relative; cursor: pointer; transition: color 0.2s ease, transform 0.2s ease; }
-        .word-node.crossed { text-decoration: line-through; text-decoration-color: #dc2626; text-decoration-thickness: 3px; color: #ef4444 !important; cursor: default; }
-        .correction-badge { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(5px); font-size: 0.75rem; background-color: #10b981; color: white; padding: 2px 8px; border-radius: 4px; white-space: nowrap; font-family: 'Arial', sans-serif; font-weight: 900; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.5); z-index: 10; opacity: 0; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); letter-spacing: 1px; }
-        .word-node.show-correction .correction-badge { opacity: 1; transform: translateX(-50%) translateY(-2px); }
-        .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
-
-        .modal-content-hidden { content-visibility: hidden; }
-        .achievement-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .achievement-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .achievement-locked { filter: grayscale(100%); opacity: 0.5; }
-
-        body.zen-mode-active main { padding-bottom: 20px !important; }
+        /* Запрещаем выделение текста и системное «лупа/копировать» при тапах по кнопкам и ячейкам.
+           Поля ввода — исключение, иначе нельзя печатать/ставить курсор. */
+        html { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+        input, textarea, [contenteditable="true"] { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; }
 
         /* ─── SKELETON SCREEN ─────────────────────────────────────── */
         #app-skeleton {
@@ -543,6 +455,7 @@
                     <div data-action="pickTaskForMode" data-arg="mistakes" class="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100 dark:border-[#2c2c2c] cursor-pointer transition-all active:scale-95 hover:-translate-y-1 hover:shadow-md flex flex-col items-center text-center group"><div class="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-900/30 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">🔥</div><h4 class="font-black text-gray-800 dark:text-gray-300 text-sm sm:text-base uppercase tracking-wide mb-1">Ошибки</h4><p class="text-[10px] sm:text-xs font-bold text-gray-400 leading-tight">Слабые места</p></div>
                     <div data-action="pickTaskForMode" data-arg="study" class="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100 dark:border-[#2c2c2c] cursor-pointer transition-all active:scale-95 hover:-translate-y-1 hover:shadow-md flex flex-col items-center text-center group"><div class="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">📖</div><h4 class="font-black text-gray-800 dark:text-gray-300 text-sm sm:text-base uppercase tracking-wide mb-1">Сюжеты</h4><p class="text-[10px] sm:text-xs font-bold text-gray-400 leading-tight">База знаний</p></div>
                     <div data-action="pickTaskForMode" data-arg="visual" class="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-6 shadow-sm border border-gray-100 dark:border-[#2c2c2c] cursor-pointer transition-all active:scale-95 hover:-translate-y-1 hover:shadow-md flex flex-col items-center text-center group"><div class="w-12 h-12 rounded-full bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition-transform">🏛️</div><h4 class="font-black text-gray-800 dark:text-gray-300 text-sm sm:text-base uppercase tracking-wide mb-1">Визуал ЕГЭ</h4><p class="text-[10px] sm:text-xs font-bold text-gray-400 leading-tight">Архитектура и живопись</p></div>
+                    <div data-action="openCram" class="bg-white dark:bg-[#1e1e1e] rounded-2xl p-4 sm:p-6 shadow-sm cursor-pointer transition-all active:scale-95 hover:-translate-y-1 hover:shadow-md flex flex-col items-center text-center group" style="border:2px solid #f59e0b"><div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl mb-3 group-hover:rotate-12 transition-transform" style="background:rgba(245,158,11,0.14)">⚡</div><h4 class="font-black text-gray-800 dark:text-gray-300 text-sm sm:text-base uppercase tracking-wide mb-1">Зубрёжка</h4><p class="text-[10px] sm:text-xs font-bold text-gray-400 leading-tight">Даты: выбор → ввод по памяти</p></div>
                 </div>
             </div>
 
@@ -561,7 +474,7 @@
                 <button data-action="backToLobby" class="flex items-center gap-1.5 text-gray-500 hover:text-examBlue dark:text-gray-400 dark:hover:text-blue-400 font-bold transition-colors text-xs sm:text-sm px-2 py-1 rounded-lg hover:bg-white dark:hover:bg-[#2c2c2c]"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg><span class="hidden sm:inline">Назад</span></button>
                 <div class="flex flex-col items-center"><h2 id="game-title-display" class="font-black text-gray-800 dark:text-gray-300 uppercase tracking-widest text-xs sm:text-sm">Режим</h2><div id="game-timer-display" class="hidden text-rose-500 font-black text-xs animate-pulse">03:00</div></div>
                 <button id="game-settings-btn" data-action="openGlobalSettings" class="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300 text-base p-1.5 bg-white dark:bg-[#2c2c2c] rounded-lg transition-colors shadow-sm">⚙️</button>
-                <button id="game-period-chip" data-action="openGlobalSettings" class="hidden items-center gap-1.5 text-[11px] sm:text-xs font-black text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-500/15 border border-indigo-200 dark:border-indigo-500/30 px-2.5 py-1.5 rounded-lg transition-colors shadow-sm active:scale-95 max-w-[55%]"><span>📅</span><span id="game-period-chip-text" class="truncate">Вся история</span></button>
+                <button id="game-period-chip" data-action="openGlobalSettings" class="hidden items-center gap-1.5 text-[11px] sm:text-xs font-black px-2.5 py-1.5 rounded-lg transition-transform shadow-sm active:scale-95 max-w-[55%]" style="background:#6366f1;color:#fff;border:1px solid #4f46e5;"><span>📅</span><span id="game-period-chip-text" class="truncate" style="color:#fff;">Вся история</span></button>
             </div>
 
             <!-- Прогресс режима выучивания (learned-ДЗ) -->
@@ -646,6 +559,12 @@
         <button data-action="openGlobalSettings" class="flex flex-col items-center justify-center w-full h-full text-gray-500 dark:text-gray-400 hover:text-blue-500 active:text-blue-500 transition-colors group"><span class="text-2xl mb-1 group-active:-translate-y-1 transition-transform">⚙️</span><span class="text-[10px] font-black uppercase tracking-widest">Настройки</span></button>
         <button data-action="openStatsModal" class="flex flex-col items-center justify-center w-full h-full text-gray-500 dark:text-gray-400 hover:text-purple-500 active:text-purple-500 transition-colors group"><span class="text-2xl mb-1 group-active:-translate-y-1 transition-transform">📊</span><span class="text-[10px] font-black uppercase tracking-widest">Профиль</span></button>
     </nav>
+
+    <!-- Полноэкранный режим «Зубрёжка» (изолированный iframe, свой яркий стиль).
+         z-index/позицию задаём инлайном: произвольный Tailwind-класс z-[10050] не попадает в собранный output.css. -->
+    <div id="cram-overlay" class="hidden" style="position:fixed;inset:0;z-index:100000;background:#fff;">
+        <iframe id="cram-frame" title="Зубрёжка дат" style="display:block;width:100%;height:100%;border:0"></iframe>
+    </div>
 
     <!-- === МОДАЛКИ === -->
 
@@ -735,7 +654,7 @@
         <div class="bg-white dark:bg-[#1e1e1e] rounded-3xl p-6 max-w-sm mx-4 text-center shadow-2xl w-[92%]">
 
             <!-- Слайд 1: Добро пожаловать -->
-            <div id="onb-step-1">
+            <div id="onb-step-1" class="hidden">
                 <div class="text-6xl mb-3">🏛️</div>
                 <h2 class="text-xl font-black text-gray-800 dark:text-gray-200 mb-2">Добро пожаловать!</h2>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
@@ -851,9 +770,9 @@
             </div>
 
             <!-- Слайд 6: Настройка профиля + старт -->
-            <div id="onb-step-6" class="hidden">
-                <div class="text-6xl mb-3">🚀</div>
-                <h2 class="text-xl font-black text-gray-800 dark:text-gray-200 mb-2">Готово! Последний шаг</h2>
+            <div id="onb-step-6">
+                <div class="text-6xl mb-3">🏛️</div>
+                <h2 class="text-xl font-black text-gray-800 dark:text-gray-200 mb-2">Добро пожаловать!</h2>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">Укажи своё имя и код класса, чтобы учитель видел твой прогресс.</p>
                 <div class="flex flex-col gap-3 mb-5">
                     <input type="text" id="onb-name-input" placeholder="Фамилия Имя, класс (11А)" class="w-full p-3 border border-gray-200 dark:border-[#3f3f46] rounded-xl dark:bg-[#181818] dark:text-gray-300 outline-none font-bold text-sm shadow-inner text-center">
@@ -864,7 +783,7 @@
             </div>
 
             <!-- Dots -->
-            <div class="flex justify-center gap-1.5 mt-4">
+            <div class="hidden justify-center gap-1.5 mt-4">
                 <div id="onb-dot-1" class="w-2 h-2 rounded-full bg-blue-500"></div>
                 <div id="onb-dot-2" class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600"></div>
                 <div id="onb-dot-3" class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600"></div>
@@ -1097,10 +1016,6 @@
                     <div class="text-center bg-white dark:bg-[#1e1e1e] p-2 sm:p-3 rounded-2xl border border-purple-100 dark:border-purple-900/30 shadow-sm"><p class="text-[8px] sm:text-[9px] text-purple-400 uppercase font-black tracking-widest">👤 №5</p><p class="text-lg sm:text-xl font-black text-purple-600 dark:text-purple-400 mt-1" id="modal-stat-task5">0</p></div>
                     <div class="text-center bg-white dark:bg-[#1e1e1e] p-2 sm:p-3 rounded-2xl border border-amber-100 dark:border-amber-900/30 shadow-sm"><p class="text-[8px] sm:text-[9px] text-amber-400 uppercase font-black tracking-widest">🎨 №7</p><p class="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 mt-1" id="modal-stat-task7">0</p></div>
                 </div>
-                <div id="student-leaderboard-container" class="hidden mb-6 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-800/30 shadow-sm">
-                    <h3 class="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>🌍</span> Топ недели · строки №4</h3>
-                    <div id="student-leaderboard-list" class="flex flex-col gap-2"></div>
-                </div>
                 <div class="mb-6 bg-white dark:bg-[#1e1e1e] p-4 rounded-2xl border border-gray-200 dark:border-[#2c2c2c] shadow-sm"><h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Прогресс по эпохам</h3><div id="stats-era-container" class="space-y-3"></div></div>
                 <div class="mb-2 bg-white dark:bg-[#1e1e1e] p-4 rounded-2xl border border-gray-200 dark:border-[#2c2c2c] shadow-sm"><h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Активность по дням (по заданиям)</h3><div id="stats-daily-container" class="space-y-2"></div></div>
             </div>
@@ -1129,13 +1044,48 @@
     <!-- === PWA + Firebase loader === -->
     <script src="pwa.js" defer></script>
 
-    <!-- FIX 2.2: defer позволяет браузеру парсить HTML параллельно с загрузкой data.js (579 КБ).
-         Оба тега defer — гарантируют порядок выполнения: data.js → app:ready dispatch. -->
-    <script src="visualArchitectureData.generated.js" defer></script>
-    <script src="visualPaintingData.generated.js" defer></script>
-    <script src="mapLegendData.generated.js" defer></script>
-    <script src="visualStudyData.generated.js" defer></script>
+    <!-- Ядро (факты, ~659 КБ): нужно для лобби и заданий. Приложение ОТКРЫВАЕТСЯ сразу
+         после него — defer парсит HTML параллельно, порядок выполнения гарантирован. -->
     <script src="data.js" defer></script>
     <script defer>document.dispatchEvent(new Event('app:ready'));</script>
+
+    <!-- Тяжёлые визуальные данные (~765 КБ: архитектура/живопись/карты/культура) нужны ТОЛЬКО
+         в Задании 7 / тренажёре / картах, а не в лобби. Раньше они грузились ДО app:ready и
+         держали заставку, пока не докачаются. Теперь грузим их в ФОНЕ, уже ПОСЛЕ открытия
+         приложения, чтобы не задерживать старт и не конкурировать за канал с ядром.
+         Все потребители этих данных защищены (`… || []`), поэтому ранний доступ безопасен;
+         после загрузки нормализуем подписи (window.normalizeVisualData в state.js). -->
+    <script>
+      (function () {
+        var FILES = [
+          'visualArchitectureData.generated.js',
+          'visualPaintingData.generated.js',
+          'mapLegendData.generated.js',
+          'visualStudyData.generated.js'
+        ];
+        function loadVisualData() {
+          var remaining = FILES.length;
+          FILES.forEach(function (src) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = s.onerror = function () {
+              if (--remaining === 0 && typeof window.normalizeVisualData === 'function') {
+                window.normalizeVisualData();
+              }
+            };
+            document.body.appendChild(s);
+          });
+        }
+        // Триггерим после готовности DOM (приложение уже инициализируется), дав лобби
+        // отрисоваться. DOMContentLoaded надёжнее app:ready: тот диспатчится inline-скриптом,
+        // у которого `defer` игнорируется браузером, поэтому событие летит во время парсинга —
+        // раньше, чем этот листенер успевает повеситься.
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () { setTimeout(loadVisualData, 200); }, { once: true });
+        } else {
+          setTimeout(loadVisualData, 200);
+        }
+      })();
+    </script>
 </body>
 </html>

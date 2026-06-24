@@ -95,22 +95,30 @@ function normalizeCultureCenturyLabels(value, seen) {
     return value;
 }
 
+// Нормализация подписей в визуальных данных (архитектура/живопись/культура).
+// Эти данные грузятся в ФОНЕ уже после открытия приложения (см. index.html),
+// поэтому нормализуем их отдельно — сразу после загрузки, а не на старте.
+window.normalizeVisualData = function normalizeVisualData() {
+    normalizeCultureCenturyLabels(window.visualArchitectureData);
+    normalizeCultureCenturyLabels(window.visualPaintingData);
+    normalizeCultureCenturyLabels(window.visualStudyData);
+};
+
 function initPrecomputed() {
     window.bigData   = typeof bigData   !== 'undefined' ? bigData   : (window.bigData   || []);
     window.task3Data = typeof task3Data !== 'undefined' ? task3Data : (window.task3Data || []);
     window.task5Data = typeof task5Data !== 'undefined' ? task5Data : (window.task5Data || []);
     window.task7Data = typeof task7Data !== 'undefined' ? task7Data : (window.task7Data || []);
     normalizeCultureCenturyLabels(window.task7Data);
-    normalizeCultureCenturyLabels(window.visualArchitectureData);
-    normalizeCultureCenturyLabels(window.visualPaintingData);
-    normalizeCultureCenturyLabels(window.visualStudyData);
+    // window.visualArchitectureData / visualPaintingData / visualStudyData нормализуются
+    // в window.normalizeVisualData() — они грузятся в фоне после открытия приложения.
 
     const totalItems = (window.bigData?.length || 0) + (window.task3Data?.length || 0) +
                        (window.task5Data?.length || 0) + (window.task7Data?.length || 0);
     if (totalItems === 0) {
         console.error('[data.js] База данных не загружена!');
         const errBanner = document.createElement('div');
-        errBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ef4444;color:white;text-align:center;padding:12px;font-weight:900;font-size:14px';
+        errBanner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--c-danger);color:white;text-align:center;padding:12px;font-weight:900;font-size:14px';
         errBanner.textContent = '⚠️ База вопросов не загружена. Обновите страницу.';
         document.body.prepend(errBanner);
     }
@@ -370,6 +378,8 @@ window.learnedCountInPeriod = learnedCountInPeriod;
 // Текущее значение прогресса этапа (для learned — живой счёт выученных).
 function hwItemProgress(item) {
     if (!item) return 0;
+    // Зубрёжка: прогресс = число выученных в тренажёре фактов (cram:* в factStreaks).
+    if (item.task === 'cram') return Math.min(item.goal || 0, (window.cramLearnedCount ? window.cramLearnedCount() : 0));
     // Выучивание = живой счёт выученных фактов периода по ОБЩЕЙ системе приложения (isFactLearned).
     // Уже выученные факты идут в автозачёт; прогресс в ДЗ и в обычной нарешке — один и тот же счётчик.
     if (item.metric === 'learned') return Math.min(item.goal || 0, learnedCountInPeriod(item.task, item.period, item.yearStart, item.yearEnd).learned);
