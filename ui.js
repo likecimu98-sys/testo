@@ -452,7 +452,7 @@ function toggleTheme() { localStorage.setItem('ege_theme', document.documentElem
 /* ──────────────────────────────────────────────────────────
    SKIN SYSTEM — 7 лобби-тем
    ────────────────────────────────────────────────────────── */
-const SKINS = ['aurora','classic','constructivism','vaporwave','sakura','terminal','midnight','scholar'];
+const SKINS = ['aurora','classic','constructivism','coffee','sakura','forest','scholar'];
 
 window.applySkin = function(skin) {
     if (!SKINS.includes(skin)) skin = 'aurora';
@@ -477,8 +477,8 @@ function updateSkinPicker(activeSkin) {
     });
 }
 
-// Apply skin on page load — тема по умолчанию: необрутализм (constructivism)
-const DEFAULT_SKIN = 'constructivism';
+// Apply skin on page load — тема по умолчанию: классика (светлая)
+const DEFAULT_SKIN = 'classic';
 (function() {
     let saved = localStorage.getItem('ege_skin') || DEFAULT_SKIN;
     // Легаси/удалённые скины (старая система beresta/cyberpunk/… больше не существует) → дефолт.
